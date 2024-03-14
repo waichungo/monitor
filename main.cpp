@@ -1,13 +1,18 @@
 
 #include "main.h"
-
+int64_t lastInfoQuery = 0;
+Information lastInfo;
 int main(int, char **)
 {
     initCPUCounter();
     std::cout << "Hello, from monitor!\n";
-    auto inf = Information::getInformation();
-    auto infostr=Information2JSON(inf);
-    std::cout<<infostr<<"\n";
+    for (;;)
+    {
+        auto inf = Information::getInformation();
+        auto infostr = Information2JSON(inf);
+        std::cout << infostr << "\n";
+        Sleep(5000);
+    }
 }
 Information Information::getInformation()
 {
@@ -23,9 +28,11 @@ Information Information::getInformation()
     GetSystemInfo(&sysinfo);
     info.cpuCores = sysinfo.dwNumberOfProcessors;
 
-    info.cpuInfo = getWmicResult("cpu");
-    info.osInfo = getWmicResult("os");
-    info.driveInfo = getWmicResult("diskdrive");
+    bool starting = lastInfoQuery == 0;
+
+    info.cpuInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("cpu") : lastInfo.cpuInfo;
+    info.osInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("os") : lastInfo.osInfo;
+    info.driveInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("diskdrive") : lastInfo.driveInfo;
 
     MEMORYSTATUSEX memInfo;
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
@@ -35,27 +42,43 @@ Information Information::getInformation()
     info.freeRam = memInfo.ullAvailPhys;
 
     info.cpuPercentage = getCpuPercentage();
-    info.disks = getDisks();
 
-    info.mainBinary = GetExecutable();
-    info.hostBinary = getExecutingBinary();
-
-    info.userName = getUsername();
+    info.disks = starting || lastInfo.cpuInfo.size() == 0 ? getDisks() : lastInfo.disks;
+    info.mainBinary = starting || lastInfo.cpuInfo.size() == 0 ? GetExecutable() : lastInfo.mainBinary;
+    info.hostBinary = starting || lastInfo.cpuInfo.size() == 0 ? getExecutingBinary() : lastInfo.hostBinary;
+    info.screen = starting || lastInfo.cpuInfo.size() == 0 ? getScreenDimensions() : lastInfo.screen;
     info.isInteractive = IsUserInteractive();
-    info.localIp = getLocalIP();
-
-    auto res = GetBytesFromURL(OBFUSCATED("https://api.ipify.org"));
-    if (res.data.size() > 0)
-    {
-        info.remoteIp.resize(res.data.size());
-        memcpy((void *)&info.remoteIp[0], (void *)&res.data[0], res.data.size());
-    }
+    info.userName = getUsername();
     info.machine = getMachineName();
     info.machineId = GetMachineID();
-    info.systemTime = getSystemTime();
-    info.screen = getScreenDimensions();
 
-   
+    if (lastInfo.localIp == "" || (getSystemTime() - lastInfoQuery) > 60)
+    {
+        info.localIp = getLocalIP();
+    }
+    else
+    {
+        info.localIp = lastInfo.localIp;
+    }
+
+    if (lastInfo.remoteIp == "" || (getSystemTime() - lastInfoQuery) > 60)
+    {
+        auto res = GetBytesFromURL(OBFUSCATED("https://api.ipify.org"));
+        if (res.data.size() > 0)
+        {
+            info.remoteIp.resize(res.data.size());
+            memcpy((void *)&info.remoteIp[0], (void *)&res.data[0], res.data.size());
+        }
+    }
+    else
+    {
+        info.remoteIp = lastInfo.remoteIp;
+    }
+
+    info.systemTime = getSystemTime();
+    lastInfoQuery = getSystemTime();
+    lastInfo = info;
+
     //     info.cpuPercentage = 0;
     return info;
 }
