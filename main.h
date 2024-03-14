@@ -20,7 +20,7 @@ using json = nlohmann::json;
 // using namespace std::chrono;
 typedef NTSYSAPI NTSTATUS (*RtlGetVersion)(PRTL_OSVERSIONINFOW *lpVersionInformation);
 typedef void(WINAPI *RtlGetVersion_FUNC)(OSVERSIONINFOEXW *);
-
+void Start();
 typedef struct WindowsVersion
 {
     int majorVersion;
