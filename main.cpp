@@ -4,6 +4,10 @@ int64_t lastInfoQuery = 0;
 Information lastInfo;
 int main(int, char **)
 {
+    Start();
+}
+void Start()
+{
     initCPUCounter();
     std::cout << "Hello, from monitor!\n";
     for (;;)
