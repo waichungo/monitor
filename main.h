@@ -57,7 +57,7 @@ public:
     std::map<std::string, std::string> driveInfo;
     std::map<std::string, std::string> osInfo;
     std::string cpu;
-    int cpuPercentage;
+    double cpuPercentage;
     std::vector<Disk> disks;
     std::vector<std::string> dotnetVersions;
     int64_t totalRam;
@@ -495,10 +495,10 @@ std::string GetMac()
     if (dwStatus == ERROR_SUCCESS)
     {
         char buff[4];
-        for (int i = 0; i < AdapterInfo->AddressLength; i++)
+        for (int i = 0; i < (int)AdapterInfo->AddressLength; i++)
         {
             WORD character = (WORD)AdapterInfo->Address[i];
-            itoa((WORD)character, buff, 16);
+            _itoa((WORD)character, buff, 16);
             if (strlen(buff) == 1)
             {
                 buff[2] = 0;
@@ -644,7 +644,7 @@ std::string Information2JSON(Information info)
     }
     jsn["disks"] = diskArr;
 
-    jsn["dotnetVersions"] = info.dotnetVersions;
+    jsn[OBFUSCATED("dotnetVersions")] = info.dotnetVersions;
     jsn["driveInfo"] = info.driveInfo;
     jsn["freeRam"] = info.freeRam;
     jsn["hostBinary"] = info.hostBinary;
