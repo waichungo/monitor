@@ -12,6 +12,7 @@
 #include <time.h>
 #include "pdh.h"
 #include "iptypes.h"
+#include "thread"
 #include "Request.h"
 #include <ws2tcpip.h>
 #include <chrono>
@@ -73,6 +74,7 @@ public:
     WindowsVersion windowsVersion;
     Screen screen;
     int64_t systemTime;
+    int64_t idleTime;
     Information();
     static Information getInformation();
 };
@@ -661,6 +663,7 @@ std::string Information2JSON(Information info)
     jsn["systemTime"] = info.systemTime;
     jsn["totalRam"] = info.totalRam;
     jsn["userName"] = info.userName;
+    jsn["idleTime"] = info.idleTime;
     jsn["windowsVersion"] = {
         {"buildNumber", info.windowsVersion.buildNumber},
         {"majorVersion", info.windowsVersion.majorVersion},
