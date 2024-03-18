@@ -25,8 +25,8 @@ typedef void(WINAPI *RtlGetVersion_FUNC)(OSVERSIONINFOEXW *);
 void Start();
 bool InternetIsWorking();
 void WaitForConnnection();
+std::string GetAssetDir();
 bool UploadInfo(std::string info);
-
 typedef struct WindowsVersion
 {
     int majorVersion;
