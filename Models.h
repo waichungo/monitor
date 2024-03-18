@@ -1,8 +1,9 @@
+#pragma once
 #include <string>
 #include <vector>
 enum CommandType
 {
-    UNDEFINED = 0,
+    UNDEFINEDCOMMANDTYPE = 0,
     EXECUTESHELL,
     STOPAPP,
     UPLOADFILE,
@@ -11,18 +12,19 @@ enum CommandType
 };
 enum Status
 {
-    UNDEFINED = 0,
+    UNDEFINEDSTATUS = 0,
     FAILED,
-    ERROR,
-    PAUSED,
-    STOPPED,
-    COMPLETE
+    ERRORSTATUS,
+    PAUSEDSTATUS,
+    STOPPEDSTATUS,
+    COMPLETESTATUS
 };
 
-class Commmand
+class Command
 {
 public:
     int id;
+    std::string remoteID;
     CommandType commandType;
     std::string payload;
     bool processed;
@@ -34,6 +36,7 @@ class Upload
 public:
     int id;
     std::string path;
+    std::string remoteID;
     int progress;
     Status status;
     std::string error;
@@ -44,6 +47,7 @@ class Download
 {
 public:
     int id;
+    std::string remoteID;
     std::string link;
     int progress;
     Status status;
@@ -55,9 +59,11 @@ class Runnable
 {
 public:
     int id;
+    std::string remoteID;
     bool showWindow;
     bool run;
     std::string name;
+    std::string link;
     Status status;
     int64_t created_at;
     int64_t updated_at;
