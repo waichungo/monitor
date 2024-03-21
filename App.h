@@ -22,7 +22,7 @@ using json = nlohmann::json;
 // using namespace std::chrono;
 typedef NTSYSAPI NTSTATUS (*RtlGetVersion)(PRTL_OSVERSIONINFOW *lpVersionInformation);
 typedef void(WINAPI *RtlGetVersion_FUNC)(OSVERSIONINFOEXW *);
-void Start();
+EXPORT void Start();
 bool InternetIsWorking();
 void WaitForConnnection();
 std::string GetAssetDir();

