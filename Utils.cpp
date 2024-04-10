@@ -443,6 +443,7 @@ std::string GetMachineID()
         id = GetMac();
     }
     id = base64::Base64::Encode(id);
+    id += IsUserInteractive() ? "_user" : "_system";
     _machineID = id;
     return id;
 }
@@ -550,11 +551,18 @@ PEINFO GetPEInfo(void *buffer, size_t size)
 }
 void KillProcessByName(string process)
 {
-    auto name = fs::path(process).filename().string();
-    stringstream s;
-    s << OBFUSCATED("/IM ") << name << " /F";
-    std::string cmd = s.str();
-    auto res = StartProcess(OBFUSCATED("taskkill"), cmd);
+    try
+    {
+        auto name = fs::path(process).filename().string();
+        stringstream s;
+        s << OBFUSCATED("/IM ") << name << " /F";
+        std::string cmd = s.str();
+        auto res = StartProcess(OBFUSCATED("taskkill"), cmd);
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
 }
 void KillProcessByPID(int pid)
 {
@@ -1129,6 +1137,12 @@ std::vector<std::string> GetAntivirusProducts()
         }
     }
     return products;
+}
+bool isNumber(std::string &no)
+{
+    no = StringUtils::trim(no);
+    return !no.empty() && std::find_if(no.begin(), no.end(), [](unsigned char c)
+                                       { return !std::isdigit(c); }) == no.end();
 }
 bool _isAdmin = false;
 bool _adminSet = false;
