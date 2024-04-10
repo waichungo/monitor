@@ -15,6 +15,7 @@
 #include "iptypes.h"
 #include "thread"
 #include "Request.h"
+#include "Models.h"
 #include <ws2tcpip.h>
 #include <chrono>
 #include <nlohmann/json.hpp>
@@ -95,5 +96,5 @@ WindowsVersion getWindowsVersion();
 Screen getScreenDimensions();
 int64_t getSystemTime();
 std::string getCompileTime();
-
-std::string Information2JSON(Information info);
+int64_t getIdleTime();
+std::string Information2JSON(Information &info);
