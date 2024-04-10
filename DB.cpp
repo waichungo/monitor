@@ -27,7 +27,7 @@ void initializeDB()
     db = std::make_shared<SQLite::Database>(SQLite::Database(dbPath, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE));
 
     // Command
-    std::string query = R"(
+    std::string query =OBFUSCATED( R"(
 CREATE TABLE IF NOT EXISTS "Command" (
 	"id"	INTEGER NOT NULL UNIQUE,
 	"remoteID"	TEXT UNIQUE,
@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS "Command" (
 	"updated_at"	NUMERIC,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
-    )";
+    )");
     int status = db->exec(query);
     // Upload
-    query = R"(
+    query =OBFUSCATED( R"(
 CREATE TABLE IF NOT EXISTS "Upload" (
 	"id"	INTEGER NOT NULL UNIQUE,
     "remoteID"	TEXT NOT NULL UNIQUE,
@@ -53,10 +53,10 @@ CREATE TABLE IF NOT EXISTS "Upload" (
 	"updated_at"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
-    )";
+    )");
     status = db->exec(query);
     // Download
-    query = R"(
+    query =OBFUSCATED( R"(
 CREATE TABLE IF NOT EXISTS "Download" (
 	"id"	INTEGER NOT NULL UNIQUE,
 	"link"	TEXT NOT NULL,
@@ -68,11 +68,11 @@ CREATE TABLE IF NOT EXISTS "Download" (
 	"updated_at"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
-    )";
+    )");
     status = db->exec(query);
 
     // runnable
-    query = R"(
+    query = OBFUSCATED(R"(
 CREATE TABLE IF NOT EXISTS "Runnable" (
 	"id"	INTEGER NOT NULL UNIQUE,
 	"showWindow"	INTEGER NOT NULL DEFAULT 0,
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS "Runnable" (
 	"updated_at"	INTEGER NOT NULL DEFAULT 0,
 	PRIMARY KEY("id" AUTOINCREMENT)
 );
-    )";
+    )");
     status = db->exec(query);
     dbMutex.unlock();
 }
@@ -128,7 +128,6 @@ std::shared_ptr<Runnable> SaveRunnable(Runnable runnable)
 }
 std::shared_ptr<Runnable> UpdateRunnable(Runnable runnable)
 {
-
     std::shared_ptr<Runnable> result = nullptr;
     std::string queryStr = R"(
     UPDATE Runnable SET showWindow = ? , run = ? , name = ? , status = ? ,remoteID = ? , link = ? , updated_at = ? where id = ? 
@@ -137,14 +136,12 @@ std::shared_ptr<Runnable> UpdateRunnable(Runnable runnable)
 
     runnable.updated_at = getSystemTime();
 
-    // Bind the integer value 6 to the first parameter of the SQL query
     statement.bind(1, runnable.showWindow ? 1 : 0);
     statement.bind(2, runnable.run ? 1 : 0);
     statement.bind(3, runnable.name);
     statement.bind(4, (int)runnable.status);
     statement.bind(5, runnable.remoteID);
     statement.bind(6, runnable.link);
-    // statement.bind(7, runnable.created_at);
     statement.bind(7, runnable.updated_at);
     statement.bind(8, runnable.id);
     dbMutex.lock();
@@ -408,7 +405,7 @@ std::shared_ptr<Command> findCommand(int64_t id)
 }
 std::vector<Command> findCommands(std::map<std::string, DBValue> params, int limit, std::string orderKey, bool desc)
 {
-    std::vector<Command> runnables;
+    std::vector<Command> commands;
 
     std::shared_ptr<SQLite::Statement> statement;
     std::string queryStr = R"(
@@ -486,16 +483,16 @@ std::vector<Command> findCommands(std::map<std::string, DBValue> params, int lim
     {
         while (statement->executeStep())
         {
-            Command runnable = Command();
-            runnable.id = statement->getColumn(0).getInt();
-            runnable.remoteID = statement->getColumn(1).getInt() != 0;
-            runnable.commandType = (CommandType)statement->getColumn(2).getInt();
-            runnable.payload = statement->getColumn(3).getString();
-            runnable.processed = (Status)statement->getColumn(4).getInt() != 0;
+            Command command = Command();
+            command.id = statement->getColumn(0).getInt();
+            command.remoteID = statement->getColumn(1).getInt() != 0;
+            command.commandType = (CommandType)statement->getColumn(2).getInt();
+            command.payload = statement->getColumn(3).getString();
+            command.processed = (Status)statement->getColumn(4).getInt() != 0;
 
-            runnable.created_at = statement->getColumn(5).getInt64();
-            runnable.updated_at = statement->getColumn(6).getInt64();
-            runnables.push_back(runnable);
+            command.created_at = statement->getColumn(5).getInt64();
+            command.updated_at = statement->getColumn(6).getInt64();
+            commands.push_back(command);
         }
     }
     catch (std::exception ex)
@@ -503,11 +500,11 @@ std::vector<Command> findCommands(std::map<std::string, DBValue> params, int lim
         std::cout << ex.what();
     }
 
-    return runnables;
+    return commands;
 }
 bool deleteCommand(int64_t id)
 {
-    std::shared_ptr<Runnable> result = nullptr;
+    std::shared_ptr<Command> result = nullptr;
     std::string queryStr = R"(
     DELETE from Command where id = ?
 )";
