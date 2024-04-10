@@ -31,24 +31,23 @@ Locker::Locker(std::string name, bool global, bool unique) : locked(false)
 }
 bool Locker::Lock()
 {
-
     _lck.lock();
-
     if (locked)
+    {
+        _lck.unlock();
         return true;
+    }
     if (this->handle != INVALID_HANDLE_VALUE && this->handle != NULL)
     {
         CloseHandle(this->handle);
         this->handle = NULL;
         locked = false;
     }
-
     auto handle = CreateMutexA(NULL, TRUE, _name.c_str());
     auto ret = GetLastError();
     if (ret != ERROR_ALREADY_EXISTS && handle != INVALID_HANDLE_VALUE && handle != NULL)
     {
         this->handle = handle;
-
         locked = true;
         _lck.unlock();
         return true;
@@ -65,7 +64,6 @@ void Locker::UnLock()
     _lck.lock();
     if (this->handle != NULL && this->handle != INVALID_HANDLE_VALUE)
     {
-
         CloseHandle(this->handle);
         this->handle = INVALID_HANDLE_VALUE;
     }
