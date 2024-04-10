@@ -1,13 +1,27 @@
 {
     "version": 2,
     "configurePresets": [
-      {
-        "name": "default",
-        "generator": "Ninja",
-        "binaryDir": "${sourceDir}/build",
-        "cacheVariables": {
-          "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        {
+            "name": "msvc_x64_preset",
+            "generator": "Visual Studio 17 2022",
+            "binaryDir": "${sourceDir}/build/",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+            }
         }
-      }
+    ],
+    "buildPresets": [
+        {
+            "name": "msvc_x64_preset-debug",
+            "displayName": "Visual Studio Community 2022 Release - amd64 - Debug",
+            "configurePreset": "msvc_x64_preset",
+            "configuration": "Debug"
+        },
+        {
+            "name": "msvc_x64_preset-release",
+            "displayName": "Visual Studio Community 2022 Release - amd64 - Release",
+            "configurePreset": "msvc_x64_preset",
+            "configuration": "Release"
+        }
     ]
-  }
+}
