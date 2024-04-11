@@ -1,3 +1,4 @@
+#include <winsock2.h>
 #include "App.h"
 #include "DB.h"
 #include "Models.h"
@@ -55,7 +56,7 @@ int main(int, char **)
     // std::string word = "u3Owj0kjGn5ESEXiEelX4gAFI5rbflwG2ACdIMFnnZHzroqcex5L1PvJajN93IrJXzN_q9DPN1pmkjfth0SRsw";
     // auto dec = Encrypter::Decrypt(word);
     // auto enc=Encrypter::Encrypt("A good and God fearing person will go to heaven");
-    RunSocks();
+   
 
     initializeDB();
 
@@ -73,6 +74,9 @@ int main(int, char **)
     // // uploadFile(std::string(R"(C:\Users\James\Downloads\AvaloniaVS.VS2022.zip)"));
     // WaitForConnnection();
     // Start();
+    while(true){
+        Sleep(20000);
+    }
 
     return 0;
 }

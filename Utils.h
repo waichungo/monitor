@@ -208,7 +208,7 @@ std::string HashString(std::string &str);
 ExecResult StartProcess(std::string file, std::string cmd,int timeoutInSecs=0,bool *shouldExit=nullptr);
 
 bool IsValidModule(vector<uint8_t> &buffer);
-bool isNumber(std::string no);
+bool isNumber(std::string &no);
 bool IsAdmin();
 bool ProcessIsRunning(std::string file);
 std::vector<std::string> GetAntivirusProducts();
