@@ -2,7 +2,7 @@
 
 size_t WriteCallback(void *ptr, size_t size, size_t nmemb, void *data)
 {
-    HttpResponse *resp = (HttpResponse *)data;
+    app::HttpResponse *resp = (app::HttpResponse *)data;
     size_t prevSz = resp->data.size();
     size_t realsize = size * nmemb;
     resp->data.resize(prevSz + realsize);
@@ -10,10 +10,10 @@ size_t WriteCallback(void *ptr, size_t size, size_t nmemb, void *data)
     // memcpy(ptr, &resp->data.data()[prevSz], realsize);
     return realsize;
 }
-HttpResponse GetBytesFromURL(string url)
+app::HttpResponse GetBytesFromURL(string url)
 {
     std::string USERAGENT = OBFUSCATED("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4573.0 Safari/537.36");
-    HttpResponse resp{0};
+    app::HttpResponse resp{0};
 
     CURL *curl_handle;
     CURLcode res;
