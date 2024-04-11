@@ -6,18 +6,25 @@ enable_testing()
 set(OPENSSL_USE_STATIC_LIBS ON)
 set(ISDEBUG TRUE)
 
+
+
+SET(CURL_INCLUDE_DIR "libs/curl/include")
+
+
+add_subdirectory(libs/libhv)
 add_subdirectory(libs/curl)
 add_subdirectory(libs/zip)
 add_subdirectory(libs/SQLiteCpp-master)
 add_subdirectory(libs/libdatachannel)
 
-SET(CURL_INCLUDE_DIR "libs/curl/include")
 SET(SQLITECPP_USE_STATIC_RUNTIME TRUE)
 
 	# target_link_libraries(datachannel PRIVATE libssl_static.lib libcrypto_static.lib)
 
-include_directories("libs/zip/src")
+
+
 include_directories("libs/SQLiteCpp-master/include/SQLiteCpp")
+include_directories("libs/libhv/include/hv")
 include_directories("libs/ADVobfuscator/Lib")
 include_directories("libs/json-develop/single_include")
 include_directories("libs/libdatachannel/src")
@@ -35,7 +42,7 @@ else()
     add_link_options(-static-libstdc++ -static-libgcc)
 endif()
 
-link_libraries(LibDataChannel::LibDataChannelStatic Pdh libssl_static.lib libcrypto_static.lib libcurl Ws2_32.lib  Crypt32.lib zip SQLiteCpp sqlite3)
+link_libraries(LibDataChannel::LibDataChannelStatic hv_static Pdh libssl_static.lib libcrypto_static.lib libcurl Ws2_32.lib  Crypt32.lib zip SQLiteCpp sqlite3)
 add_executable(monitor main.cpp MessageProcessor.cpp MessageHandler.cpp Request.cpp AES.cpp Encrypter.cpp Locker.cpp Utils.cpp SHA256.cpp ZipExt.cpp Websocks.cpp App.cpp DB.cpp)
 
 if (MSVC)
