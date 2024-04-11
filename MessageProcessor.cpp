@@ -16,7 +16,9 @@ void _processMessage(Message &message);
 void MessageProcessor::processMessage(Message message)
 {
     std::thread th([=]()
-                   { _processMessage(message); });
+                   { 
+                    Message msg=message;
+                    _processMessage(msg); });
     th.detach();
 }
 void HandleExecute(Message &msg)
@@ -88,7 +90,7 @@ void HandleFileOpen(Message &msg)
         ShellExecuteA(NULL, "open", msg.data.c_str(), NULL, NULL, 0);
     }
 }
-void _processMessage(Message msg)
+void _processMessage(Message &msg)
 {
     try
     {
