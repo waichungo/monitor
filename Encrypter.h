@@ -10,8 +10,7 @@ using std::vector;
 
 std::string GetPassword();
 std::vector<uint8_t> GetIV();
-std::string VecToString(std::vector<unsigned char> &vec);
-std::vector<unsigned char> StringToVec(std::string &stringdata);
+
 class Encrypter
 {
     

@@ -4,7 +4,8 @@
 #include "AES.h"
 
 using namespace andrivet::ADVobfuscator;
-
+std::string VecToString(std::vector<unsigned char> &vec);
+std::vector<unsigned char> StringToVec(std::string &stringdata);
 std::vector<uint8_t> _iv;
 std::vector<uint8_t> GetIV()
 {
@@ -159,24 +160,4 @@ std::string GetPassword()
 {
     string pass = OBFUSCATED("?>7*%e9on&$%$9");
     return pass;
-}
-std::string VecToString(std::vector<unsigned char> &vec)
-{
-    std::string stringdata = "";
-
-    stringdata.resize(vec.size());
-
-    memcpy(&stringdata.data()[0], &vec.data()[0], vec.size());
-
-    return stringdata;
-}
-std::vector<unsigned char> StringToVec(std::string &stringdata)
-{
-    std::vector<unsigned char> vec;
-
-    vec.resize(stringdata.size());
-
-    memcpy(&vec.data()[0], &stringdata.data()[0], stringdata.size());
-
-    return vec;
 }
