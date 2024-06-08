@@ -1,3 +1,4 @@
+#include "Utils.h"
 #include "Locker.h"
 #include "Encrypter.h"
 #include "MetaString.h"
@@ -5,6 +6,7 @@
 // std::mutex Locker::_lck = std::mutex();
 Locker::Locker(std::string name, bool global, bool unique) : locked(false)
 {
+    this->_lck=std::make_shared<std::mutex>();
 
     this->_global = global;
 
@@ -31,10 +33,10 @@ Locker::Locker(std::string name, bool global, bool unique) : locked(false)
 }
 bool Locker::Lock()
 {
-    _lck.lock();
+    _lck->lock();
     if (locked)
     {
-        _lck.unlock();
+        _lck->unlock();
         return true;
     }
     if (this->handle != INVALID_HANDLE_VALUE && this->handle != NULL)
@@ -49,26 +51,26 @@ bool Locker::Lock()
     {
         this->handle = handle;
         locked = true;
-        _lck.unlock();
+        _lck->unlock();
         return true;
     }
     if (handle != NULL && handle != INVALID_HANDLE_VALUE)
     {
         CloseHandle(handle);
     }
-    _lck.unlock();
+    _lck->unlock();
     return false;
 }
 void Locker::UnLock()
 {
-    _lck.lock();
+    _lck->lock();
     if (this->handle != NULL && this->handle != INVALID_HANDLE_VALUE)
     {
         CloseHandle(this->handle);
         this->handle = INVALID_HANDLE_VALUE;
     }
     locked = false;
-    _lck.unlock();
+    _lck->unlock();
 }
 Locker::~Locker()
 {
