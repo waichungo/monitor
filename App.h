@@ -44,6 +44,7 @@ typedef struct WindowsVersion
     std::string name;
 } WindowsVersion;
 
+
 typedef struct Screen
 {
     int width;
