@@ -6,7 +6,6 @@
 
 #include <cstring>
 
-
 namespace base64
 {
     const char base64_url_alphabet[] = {
@@ -36,6 +35,10 @@ namespace base64
         {
             std::string result = base64_encode(&buffer[0], buffer.size());
             return result;
+        }
+        static std::string Encode(void *buffer, size_t len)
+        {
+            return base64_encode((uint8_t *)buffer, len);
         }
         static std::string Encode(std::string &text)
         {
