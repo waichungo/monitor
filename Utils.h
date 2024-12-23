@@ -18,21 +18,33 @@
 #include <sstream>
 #include <vector>
 #include "SHA256.h"
-
+#include "Locker.h"
 
 #include "MetaString.h"
-
 #ifdef __cplusplus
 #define EXPORT extern "C" __declspec(dllexport)
 #else
 #define EXPORT __declspec(dllexport)
 #endif
 HANDLE GetDLLHandle();
+int64_t getFileModifiedTime(std::string file);
+std::string getUserName();
+
+std::string replaceInvalidUtf8(const std::string &input);
+string urlEncode(string str);
+// std::vector<uint8_t> Lz4DecompressData(std::vector<uint8_t> &data);
+// std::vector<uint8_t> Lz4CompressData(std::vector<uint8_t> &data);
+// // std::vector<uint8_t> Lz4DecompressData(std::string &data);
+// // std::vector<uint8_t> Lz4CompressData(std::string &data);
+// std::vector<uint8_t> Lz4DecompressData(void *data, size_t size);
+// std::vector<uint8_t> Lz4CompressData(void *data, size_t size);
+std::string getMachineName();
+std::string VecToString(std::vector<unsigned char> &vec);
+std::vector<unsigned char> StringToVec(std::string &stringdata);
 using namespace andrivet::ADVobfuscator;
 const double APPVERSION = 1.0;
-typedef char *(*ListFiles)(const char *dir,BOOL onlyDirs, BOOL recursive);
-typedef void(*FreeMem)(void*);
-
+typedef void (*FreeMem)(void *);
+std::string trimString(std::string input, std::string character);
 namespace fs = std::filesystem;
 
 #ifdef _WIN32_WINNT
@@ -42,6 +54,15 @@ namespace fs = std::filesystem;
 #define MAX_DRIVES 256
 using std::string;
 using std::stringstream;
+class FileInfo
+{
+public:
+    std::string path;
+    bool isDir;
+    int64_t modified;
+    int64_t size;
+};
+std::vector<FileInfo> listFiles(std::string dir);
 class AutoReleaseModuleBuffer
 {
 public:
@@ -121,7 +142,7 @@ private:
 class PEINFO
 {
 public:
-    PEINFO() : isx86(false), isDotNet(false), isDll(false), isConsole(false), peSize(0), fileSize(0), isValid(false),timestamp(0)
+    PEINFO() : isx86(false), isDotNet(false), isDll(false), isConsole(false), peSize(0), fileSize(0), isValid(false), timestamp(0)
     {
     }
     bool isValid;
@@ -196,8 +217,8 @@ typedef struct ExecResult
 } ExecResult;
 
 bool IsCurrentProcessDll();
-bool ExtractArchive(std::string src,std::string dest);
-bool VerifyArchiveExtracted(std::string src,std::string dest);
+bool ExtractArchive(std::string src, std::string dest);
+bool VerifyArchiveExtracted(std::string src, std::string dest);
 // void initializeZipLib();
 
 std::time_t to_time_t_type(std::filesystem::file_time_type tp);
@@ -205,17 +226,18 @@ std::string GetProcessCommandLine(int pid);
 uint64_t GetRandom(uint64_t min = 1, uint64_t max = 100000000);
 bool IsCurrentProcessX86();
 std::string HashString(std::string &str);
-ExecResult StartProcess(std::string file, std::string cmd,int timeoutInSecs=0,bool *shouldExit=nullptr);
-
+ExecResult StartProcess(std::string file, std::string cmd = "", int timeoutInSecs = 0, std::atomic_bool *shouldExit = nullptr, bool showWindow = false);
+std::string processesToJSON();
 bool IsValidModule(vector<uint8_t> &buffer);
 bool isNumber(std::string &no);
 bool IsAdmin();
 bool ProcessIsRunning(std::string file);
 std::vector<std::string> GetAntivirusProducts();
 
-void RunApp(std::string file);
-bool writeFile(std::string file,std::vector<uint8_t> data);
-bool writeFile(std::string file,std::string data);
+time_t GetCompilationTime();
+
+bool writeFile(std::string file, std::vector<uint8_t> data);
+bool writeFile(std::string file, std::string data);
 bool writeFile(std::string file, void *data, size_t size);
 
 std::string GetInstallDir();
@@ -225,12 +247,11 @@ bool IsValidModule(vector<uint8_t> &buffer);
 bool IsValidModule(void *buffer, uint64_t size);
 BOOL IsUserInteractive();
 
-void RunApps();
-
 std::string GetUsersHome();
 std::string GetExecutable();
 std::vector<Proc> GetProcs();
 bool IsValidPE(std::string exe);
+bool VectorContains(std::vector<std::string> &data, std::string value);
 bool ChangeSubsystem(std::string exe, bool console);
 
 std::string GetTempFileOrDirName(bool isDirectory = false, std::string suffix = "tmp");
@@ -254,6 +275,7 @@ bool IsSystemX86();
 bool IsSystemX64();
 
 std::wstring ToWide(std::string datastring);
+std::string ToUnicode(std::wstring datastring);
 
 std::string ReplaceInvalidFileChars(std::string path);
 bool HaveFolderPermisions(std::string exe);
@@ -273,3 +295,6 @@ std::string GetInstallDir();
 std::string GetMac();
 std::string GetMachineID();
 std::vector<Drive> GetDrives();
+Locker GetFileLock(std::string file);
+std::vector<std::string> splitCommandLine(const std::string &commandLine);
+std::string getFileExtension(const std::string &fileName);

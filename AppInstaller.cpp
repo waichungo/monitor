@@ -1,30 +1,23 @@
 #include "AppInstaller.h"
 #include "Base64.hpp"
 #include "ZipExt.h"
+#include "Models.h"
+#include "Downloader.h"
+#include "DB.h"
 
-std::string GetAppsDir()
-{
-    auto dir = fs::path(GetAssetDir()) /= OBFUSCATED("apps");
-    if (!Exists(dir.string()))
-    {
-        try
-        {
-            fs::create_directories(dir);
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << e.what() << '\n';
-        }
-    }
-    return dir.string();
-}
-AppInstallResult InstallApp(std::string file)
+
+AppInstallResult InstallApp(Runnable runnable)
 {
     AppInstallResult res;
     res.success = false;
+    std::string file = (fs::path(GetDefaultAppsDownloadsDir()) /= runnable.remoteID).string();
+    if (!Exists(file))
+    {
+        file += "." + getFileExtension(runnable.name);
+    }
     if (Exists(file))
     {
-        auto dir = fs::path(GetAppsDir()) /= RemoveExt(fs::path(file).filename().string());
+        auto dir = fs::path(GetAppsDir()) /= runnable.remoteID;
         res.installDir = dir.string();
         if (!Exists(dir.string()))
         {
@@ -38,9 +31,9 @@ AppInstallResult InstallApp(std::string file)
             }
         }
         std::string target;
-        if (StringUtils::endsWith(file, ".exe"))
+        if (StringUtils::endsWith(runnable.name, ".exe"))
         {
-            target = (dir /= fs::path(file).filename()).string();
+            target = (dir /= fs::path(runnable.name).filename()).string();
             res.mainExe = target;
             auto l = GetFileLock(target);
             while (!l.Lock())
@@ -63,7 +56,7 @@ AppInstallResult InstallApp(std::string file)
             res.success = moved;
             return res;
         }
-        else if (StringUtils::endsWith(file, ".zip"))
+        else if (StringUtils::endsWith(runnable.name, ".zip"))
         {
             auto l = GetFileLock(dir.string());
             while (!l.Lock())
@@ -71,65 +64,75 @@ AppInstallResult InstallApp(std::string file)
                 Sleep(200);
             }
             KillAllFromDirectory(dir.string());
-            for (auto &path : fs::recursive_directory_iterator(dir))
+            try
+            {
+                for (auto &path : fs::recursive_directory_iterator(dir.string()))
+                {
+                    try
+                    {
+                        if (!path.is_directory())
+                        {
+
+                            fs::remove(path);
+                        }
+                        else
+                        {
+                            fs::remove_all(dir.string());
+                        }
+                    }
+                    catch (const std::exception &e)
+                    {
+                        std::cerr << e.what() << '\n';
+                    }
+                }
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << e.what() << '\n';
+            }
+            bool extracted = zipext::ExtractToFolder(file, dir.string());
+            res.success = extracted;
+            if (extracted)
             {
                 try
                 {
-                    if (!path.is_directory())
-                    {
-
-                        fs::remove(path);
-                    }
-                    else
-                    {
-                        fs::remove_all(dir.string());
-                    }
+                    fs::remove(file);
                 }
                 catch (const std::exception &e)
                 {
                     std::cerr << e.what() << '\n';
                 }
             }
-            bool extracted = zipext::ExtractToFolder(file, dir.string());
-            res.success = extracted;
-            if(extracted){
-                try
-                {
-                    fs::remove(file);
-                }
-                catch(const std::exception& e)
-                {
-                    std::cerr << e.what() << '\n';
-                }
-                
-            }
+            auto dirTmp = dir;
 
-            target = (dir /= (RemoveExt(fs::path(file).filename().string()) + ".exe")).string();
+            auto appName = runnable.name;
+            if (StringUtils::endsWith(appName, ".zip"))
+            {
+                appName = RemoveExt(appName) + ".exe";
+            }
+            target = (dirTmp /= appName).string();
             if (Exists(target))
             {
                 res.mainExe = target;
             }
             else
             {
-                target = (dir /= (RemoveExt(fs::path(file).filename().string()) + ".dll")).string();
-                if (Exists(target))
+                dirTmp = dir;
+                for (auto &file : fs::recursive_directory_iterator(dirTmp))
                 {
-                    res.mainExe = target;
-                }
-                else
-                {
-                    for (auto &file : fs::recursive_directory_iterator(dir))
+                    if (StringUtils::endsWith(file.path().string(), ".exe"))
                     {
-                        if (StringUtils::endsWith(file.path().string(), ".exe"))
-                        {
-                            res.mainExe = file.path().string();
-                            break;
-                        }
+                        res.mainExe = file.path().string();
+                        break;
                     }
                 }
             }
             return res;
         }
+    }
+    else
+    {
+        res.success = false;
     }
     return res;
 }

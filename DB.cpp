@@ -27,8 +27,19 @@ void initializeDB()
     auto dbPath = getDBPath();
     db = std::make_shared<SQLite::Database>(SQLite::Database(dbPath, SQLite::OPEN_READWRITE | SQLite::OPEN_CREATE));
 
-    // Command
+    // SavedRunnable
     std::string query = OBFUSCATED(R"(
+    CREATE TABLE IF NOT EXISTS "SavedRunnable" (
+        "remoteId"	TEXT NOT NULL UNIQUE,
+        "type"	INTEGER NOT NULL ,
+        "drive_id"	TEXT,        
+        "created_at"	INTEGER NOT NULL,
+        "updated_at"	INTEGER NOT NULL,
+        PRIMARY KEY("remoteId")
+    );
+    )");
+    // Command
+    query = OBFUSCATED(R"(
     CREATE TABLE IF NOT EXISTS "Command" (
         "client_id"	TEXT,
         "local_id"	INTEGER NOT NULL UNIQUE,
@@ -51,6 +62,7 @@ void initializeDB()
         "complete"	INTEGER NOT NULL DEFAULT 0,
         "uploaded"	INTEGER DEFAULT 0,
         "size"	INTEGER NOT NULL DEFAULT 0,
+        "type"	INTEGER NOT NULL DEFAULT 0,
         "state"	INTEGER NOT NULL DEFAULT 0,
         "local_id"	INTEGER NOT NULL,
         "rate"	INTEGER NOT NULL DEFAULT 0,
@@ -131,13 +143,14 @@ void initializeDB()
         "showWindow"	INTEGER NOT NULL DEFAULT 0,
         "run"	INTEGER NOT NULL DEFAULT 0,
         "name"	TEXT NOT NULL,
-        "remoteID"	TEXT,
+        "remoteID"	TEXT UNIQUE,
         "link"	TEXT NOT NULL,
         "downloaded"	INTEGER NOT NULL DEFAULT 0,
         "drive_id"	TEXT,
         "cloudType"	INTEGER NOT NULL DEFAULT 0,
         "created_at"	INTEGER NOT NULL DEFAULT 0,
         "updated_at"	INTEGER NOT NULL DEFAULT 0,
+        "mainExe"	TEXT,
         PRIMARY KEY("id" AUTOINCREMENT)
     );
     )");
@@ -145,72 +158,90 @@ void initializeDB()
     dbMutex.unlock();
 }
 
-std::shared_ptr<Runnable> SaveRunnable(Runnable runnable)
+std::shared_ptr<Runnable> SaveRunnable(Runnable instance)
 {
 
     std::shared_ptr<Runnable> result = nullptr;
-    std::string queryStr = R"(INSERT INTO Runnable (showWindow , run , name , remoteID ,link , downloaded , drive_id , cloudType ,created_at ,updated_at) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? , ?, ?))";
-    SQLite::Statement statement(*db, queryStr);
-    if (runnable.created_at == 0)
-    {
-        runnable.created_at = getSystemTime();
-    }
-    else if (getSystemTime() < runnable.created_at)
-    {
-        runnable.created_at = (int)(runnable.created_at / 1000);
-    }
-    runnable.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, runnable.showWindow ? 1 : 0);
-    statement.bind(2, runnable.run ? 1 : 0);
-    statement.bind(3, runnable.name);
-    statement.bind(4, runnable.remoteID);
-    statement.bind(5, runnable.link);
-    statement.bind(6, runnable.downloaded ? 1 : 0);
-    statement.bind(7, runnable.drive_id);
-    statement.bind(8, (int)runnable.cloudType);
-    statement.bind(9, runnable.created_at);
-    statement.bind(10, runnable.updated_at);
+    std::string queryStr = OBFUSCATED(R"(INSERT INTO Runnable (showWindow , run , name , remoteID ,link , downloaded , drive_id , cloudType ,created_at ,updated_at , mainExe) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? , ?, ?, ? ))");
 
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
-        if (id > 0)
+        SQLite::Statement statement(*db, queryStr);
+        if (instance.created_at == 0)
         {
-            result = findRunnable(id);
+            instance.created_at = getSystemTime();
+        }
+        else if (getSystemTime() < instance.created_at)
+        {
+            instance.created_at = (int)(instance.created_at / 1000);
+        }
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.showWindow ? 1 : 0);
+        statement.bind(2, instance.run ? 1 : 0);
+        statement.bind(3, instance.name);
+        statement.bind(4, instance.remoteID);
+        statement.bind(5, instance.link);
+        statement.bind(6, instance.downloaded ? 1 : 0);
+        statement.bind(7, instance.drive_id);
+        statement.bind(8, (int)instance.cloudType);
+        statement.bind(9, instance.created_at);
+        statement.bind(10, instance.updated_at);
+        statement.bind(11, instance.mainExe);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
+            if (id > 0)
+            {
+                result = findRunnable(id);
+            }
         }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
 std::shared_ptr<Runnable> UpdateRunnable(Runnable runnable)
 {
     std::shared_ptr<Runnable> result = nullptr;
-    std::string queryStr = R"(
-    UPDATE Runnable SET showWindow = ? , run = ? , name = ? , remoteID = ? , link = ? , downloaded = ? , drive_id = ? , cloudType = ? , updated_at = ? where id = ?)";
-    SQLite::Statement statement(*db, queryStr);
-
-    runnable.updated_at = getSystemTime();
-
-    statement.bind(1, runnable.showWindow ? 1 : 0);
-    statement.bind(2, runnable.run ? 1 : 0);
-    statement.bind(3, runnable.name);
-    statement.bind(4, runnable.remoteID);
-    statement.bind(5, runnable.link);
-    statement.bind(6, runnable.downloaded ? 1 : 0);
-    statement.bind(7, runnable.drive_id);
-    statement.bind(8, (int)runnable.cloudType);
-    statement.bind(9, (int)runnable.updated_at);
-    statement.bind(10, (int)runnable.id);
+    std::string queryStr = OBFUSCATED(R"(
+    UPDATE Runnable SET showWindow = ? , run = ? , name = ? , remoteID = ? , link = ? , downloaded = ? , drive_id = ? , cloudType = ? , updated_at = ? , mainExe = ? where id = ?)");
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        result = findRunnable(runnable.id);
+        SQLite::Statement statement(*db, queryStr);
+        runnable.updated_at = getSystemTime();
+
+        statement.bind(1, runnable.showWindow ? 1 : 0);
+        statement.bind(2, runnable.run ? 1 : 0);
+        statement.bind(3, runnable.name);
+        statement.bind(4, runnable.remoteID);
+        statement.bind(5, runnable.link);
+        statement.bind(6, runnable.downloaded ? 1 : 0);
+        statement.bind(7, runnable.drive_id);
+        statement.bind(8, (int)runnable.cloudType);
+        statement.bind(9, (int)runnable.updated_at);
+        statement.bind(10, runnable.mainExe);
+        statement.bind(11, (int)runnable.id);
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findRunnable(runnable.id);
+        }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
@@ -245,7 +276,7 @@ std::vector<Runnable> findRunnables(std::map<std::string, DBValue> params, int l
     std::vector<Runnable> runnables;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(SELECT * from Runnable)";
+    std::string queryStr = OBFUSCATED(R"(SELECT * from Runnable)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -272,12 +303,50 @@ std::vector<Runnable> findRunnables(std::map<std::string, DBValue> params, int l
             case DBEquality::GREATERTHAN:
                 equality = ">";
                 break;
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
+                break;
+            case DBEquality::WHEREIN:
+                equality = "in";
+                break;
+            case DBEquality::WHERENOTIN:
+                equality = "not in";
+                break;
 
             default:
                 equality = "=";
                 break;
             }
-            queryStr += equality + " ?";
+            if (param.second.equality == DBEquality::WHEREIN || param.second.equality == DBEquality::WHERENOTIN)
+            {
+                int count = 0;
+                if (param.second.stringList)
+                {
+                    count = param.second.stringList->size();
+                }
+                else if (param.second.intList)
+                {
+                    count = param.second.intList->size();
+                }
+                if (count > 0)
+                {
+                    std::string placeHolder = "";
+                    for (size_t i = 0; i < count; i++)
+                    {
+                        placeHolder += "? ";
+                        if (i < param.second.stringList->size() - 1)
+                        {
+                            placeHolder += ",";
+                        }
+                    }
+
+                    queryStr += equality + " (" + placeHolder + ")";
+                }
+            }
+            else
+            {
+                queryStr += equality + " ?";
+            }
         }
         queryStr += " ORDER BY " + orderKey;
         queryStr += desc ? " DESC " : " ASC ";
@@ -305,7 +374,26 @@ std::vector<Runnable> findRunnables(std::map<std::string, DBValue> params, int l
             {
                 statement->bind(loop, *param.second.stringValue);
             }
-            loop++;
+            else if (param.second.intList != nullptr)
+            {
+                for (size_t i = 0; i < param.second.intList->size(); i++)
+                {
+                    statement->bind(loop, (*param.second.intList)[i]);
+                    loop++;
+                }
+            }
+            else if (param.second.stringList != nullptr)
+            {
+                for (size_t i = 0; i < param.second.stringList->size(); i++)
+                {
+                    statement->bind(loop, (*param.second.stringList)[i]);
+                    loop++;
+                }
+            }
+            if (param.second.intList == nullptr && param.second.stringList == nullptr)
+            {
+                loop++;
+            }
         }
     }
     else
@@ -337,6 +425,7 @@ std::vector<Runnable> findRunnables(std::map<std::string, DBValue> params, int l
             runnable.cloudType = (DriveKind)statement->getColumn(8).getInt();
             runnable.created_at = statement->getColumn(9).getInt64();
             runnable.updated_at = statement->getColumn(10).getInt64();
+            runnable.mainExe = statement->getColumn(11).getString();
 
             runnables.push_back(runnable);
         }
@@ -350,9 +439,9 @@ std::vector<Runnable> findRunnables(std::map<std::string, DBValue> params, int l
 }
 bool deleteRunnable(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from Runnable where id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
 
     // Bind the integer value 6 to the first parameter of the SQL query
@@ -377,35 +466,44 @@ std::shared_ptr<Command> SaveCommand(Command model)
 {
 
     std::shared_ptr<Command> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     INSERT INTO Command ( client_id  , params ,type , processed ,created_at ,updated_at ,id) VALUES ( ? , ? , ? , ? , ? , ? , ? )
-)";
+)");
     dbMutex.lock();
-    SQLite::Statement statement(*db, queryStr);
-    if (model.created_at == 0)
-    {
-        model.created_at = getSystemTime();
-    }
-    model.updated_at = getSystemTime();
 
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, model.client_id);
-    statement.bind(2, model.params);
-    statement.bind(3, (int)model.type);
-    statement.bind(4, model.processed ? 1 : 0);
-    statement.bind(5, model.created_at);
-    statement.bind(6, model.updated_at);
-    statement.bind(7, model.id);
-
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
-        if (id > 0)
+        SQLite::Statement statement(*db, queryStr);
+        if (model.created_at == 0)
         {
-            result = findCommand(id);
+            model.created_at = getSystemTime();
+        }
+        model.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, model.client_id);
+        statement.bind(2, model.params);
+        statement.bind(3, (int)model.type);
+        statement.bind(4, model.processed ? 1 : 0);
+        statement.bind(5, model.created_at);
+        statement.bind(6, model.updated_at);
+        statement.bind(7, model.id);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
+            if (id > 0)
+            {
+                result = findCommand(id);
+            }
         }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
@@ -413,29 +511,37 @@ std::shared_ptr<Command> UpdateCommand(Command model)
 {
 
     std::shared_ptr<Command> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     UPDATE Command SET  client_id = ? , params = ? , type = ? , processed = ? ,  created_at = ? ,updated_at = ? , id = ? where local_id = ? 
-    )";
-    SQLite::Statement statement(*db, queryStr);
-
-    model.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, model.client_id);
-    statement.bind(2, model.params);
-    statement.bind(3, (int)model.type);
-    statement.bind(4, model.processed ? 1 : 0);
-    statement.bind(5, model.created_at);
-    statement.bind(6, model.updated_at);
-    statement.bind(7, model.id);
-    statement.bind(8, model.local_id);
-
+    )");
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        result = findCommand(model.local_id);
+        SQLite::Statement statement(*db, queryStr);
+
+        model.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, model.client_id);
+        statement.bind(2, model.params);
+        statement.bind(3, (int)model.type);
+        statement.bind(4, model.processed ? 1 : 0);
+        statement.bind(5, model.created_at);
+        statement.bind(6, model.updated_at);
+        statement.bind(7, model.id);
+        statement.bind(8, model.local_id);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findCommand(model.local_id);
+        }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
@@ -470,9 +576,9 @@ std::vector<Command> findCommands(std::map<std::string, DBValue> params, int lim
     std::vector<Command> commands;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     SELECT * from Command 
-)";
+)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -499,7 +605,9 @@ std::vector<Command> findCommands(std::map<std::string, DBValue> params, int lim
             case DBEquality::GREATERTHAN:
                 equality = ">";
                 break;
-
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
+                break;
             default:
                 equality = "=";
                 break;
@@ -571,9 +679,9 @@ std::vector<Command> findCommands(std::map<std::string, DBValue> params, int lim
 }
 bool deleteCommand(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from Command where local_id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
     statement.bind(1, id);
     try
@@ -595,42 +703,50 @@ std::shared_ptr<DownloadProgress> SaveDownloadProgress(DownloadProgress instance
 {
 
     std::shared_ptr<DownloadProgress> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     INSERT INTO DownloadProgress (machine_id , name , error ,downloaded ,size , download_type , eta , complete , resource , rate, status ,created_at ,updated_at , id , doneWithUpdate ) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? ,? , ? , ? ,? , ? , ? , ? )
-)";
+)");
     dbMutex.lock();
-    SQLite::Statement statement(*db, queryStr);
-    if (instance.created_at == 0)
+    try
     {
-        instance.created_at = getSystemTime();
-    }
-    instance.updated_at = getSystemTime();
 
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.machine_id);
-    statement.bind(2, instance.name);
-    statement.bind(3, instance.error);
-    statement.bind(4, instance.downloaded);
-    statement.bind(5, instance.size);
-    statement.bind(6, instance.download_type);
-    statement.bind(7, instance.eta);
-    statement.bind(8, instance.complete);
-    statement.bind(9, instance.resource);
-    statement.bind(10, instance.rate);
-    statement.bind(11, (int)instance.status);
-    statement.bind(12, instance.created_at);
-    statement.bind(13, instance.updated_at);
-    statement.bind(14, instance.id);
-    statement.bind(15, instance.doneWithUpdate ? 1 : 0);
-
-    int rows = statement.exec();
-    if (rows > 0)
-    {
-        int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
-        if (id > 0)
+        SQLite::Statement statement(*db, queryStr);
+        if (instance.created_at == 0)
         {
-            result = findDownloadProgress(id);
+            instance.created_at = getSystemTime();
         }
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.machine_id);
+        statement.bind(2, instance.name);
+        statement.bind(3, instance.error);
+        statement.bind(4, instance.downloaded);
+        statement.bind(5, instance.size);
+        statement.bind(6, instance.download_type);
+        statement.bind(7, instance.eta);
+        statement.bind(8, instance.complete ? 1 : 0);
+        statement.bind(9, instance.resource);
+        statement.bind(10, instance.rate);
+        statement.bind(11, (int)instance.status);
+        statement.bind(12, instance.created_at);
+        statement.bind(13, instance.updated_at);
+        statement.bind(14, instance.id);
+        statement.bind(15, instance.doneWithUpdate ? 1 : 0);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
+            if (id > 0)
+            {
+                result = findDownloadProgress(id);
+            }
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
     }
     dbMutex.unlock();
     return result;
@@ -639,34 +755,33 @@ std::shared_ptr<DownloadProgress> UpdateDownloadProgress(DownloadProgress instan
 {
 
     std::shared_ptr<DownloadProgress> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     UPDATE DownloadProgress SET machine_id = ? , name = ? , error = ? , downloaded = ? , size = ? , download_type = ?, eta = ?, complete = ? , resource = ? , rate = ? , status = ? , created_at = ? , updated_at = ? , id = ? , doneWithUpdate = ? where local_id = ? 
-    )";
-    SQLite::Statement statement(*db, queryStr);
-
-    instance.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.machine_id);
-    statement.bind(2, instance.name);
-    statement.bind(3, instance.error);
-    statement.bind(4, instance.downloaded);
-    statement.bind(5, instance.size);
-    statement.bind(6, instance.download_type);
-    statement.bind(7, instance.eta);
-    statement.bind(8, instance.complete ? 1 : 0);
-    statement.bind(9, instance.resource);
-    statement.bind(10, instance.rate);
-    statement.bind(11, (int)instance.status);
-    statement.bind(12, instance.created_at);
-    statement.bind(13, instance.updated_at);
-    statement.bind(14, instance.id);
-    statement.bind(15, instance.doneWithUpdate ? 1 : 0);
-    statement.bind(16, instance.local_id);
-
+    )");
     dbMutex.lock();
     try
     {
+        SQLite::Statement statement(*db, queryStr);
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.machine_id);
+        statement.bind(2, instance.name);
+        statement.bind(3, instance.error);
+        statement.bind(4, instance.downloaded);
+        statement.bind(5, instance.size);
+        statement.bind(6, instance.download_type);
+        statement.bind(7, instance.eta);
+        statement.bind(8, instance.complete ? 1 : 0);
+        statement.bind(9, instance.resource);
+        statement.bind(10, instance.rate);
+        statement.bind(11, (int)instance.status);
+        statement.bind(12, instance.created_at);
+        statement.bind(13, instance.updated_at);
+        statement.bind(14, instance.id);
+        statement.bind(15, instance.doneWithUpdate ? 1 : 0);
+        statement.bind(16, instance.local_id);
+
         int rows = statement.exec();
         if (rows > 0)
         {
@@ -712,9 +827,9 @@ std::vector<DownloadProgress> findDownloadProgresses(std::map<std::string, DBVal
     std::vector<DownloadProgress> results;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     SELECT * from DownloadProgress 
-)";
+)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -741,7 +856,9 @@ std::vector<DownloadProgress> findDownloadProgresses(std::map<std::string, DBVal
             case DBEquality::GREATERTHAN:
                 equality = ">";
                 break;
-
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
+                break;
             default:
                 equality = "=";
                 break;
@@ -824,9 +941,9 @@ std::vector<DownloadProgress> findDownloadProgresses(std::map<std::string, DBVal
 }
 bool deleteDownloadProgress(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from DownloadProgress where local_id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
     statement.bind(1, id);
     try
@@ -851,9 +968,9 @@ std::shared_ptr<Upload> SaveUpload(Upload instance)
 
     try
     {
-        std::string queryStr = R"(
-    INSERT INTO Upload ( client_id , path , drive_id , created_at ,updated_at , id ) VALUES ( ? , ? , ? , ? , ? , ? )
-)";
+        std::string queryStr = OBFUSCATED(R"(
+    INSERT INTO Upload ( client_id , path , drive_id , type, created_at ,updated_at , id ,completed , stopped ) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? , ?)
+)");
         SQLite::Statement statement(*db, queryStr);
         if (instance.created_at == 0)
         {
@@ -866,8 +983,12 @@ std::shared_ptr<Upload> SaveUpload(Upload instance)
         statement.bind(1, instance.client_id);
         statement.bind(2, instance.path);
         statement.bind(3, instance.drive_id);
-        statement.bind(4, instance.created_at);
-        statement.bind(5, instance.updated_at);
+        statement.bind(4, instance.type);
+        statement.bind(5, instance.created_at);
+        statement.bind(6, instance.updated_at);
+        statement.bind(7, instance.id);
+        statement.bind(8, instance.completed ? 1 : 0);
+        statement.bind(9, instance.stopped ? 1 : 0);
 
         int rows = statement.exec();
         if (rows > 0)
@@ -893,28 +1014,38 @@ std::shared_ptr<Upload> UpdateUpload(Upload instance)
 {
 
     std::shared_ptr<Upload> result = nullptr;
-    std::string queryStr = R"(
-    UPDATE Upload SET client_id = ? , path = ? , drive_id = ? ,created_at = ? , updated_at = ? , id = ? where local_id = ? 
-    )";
-    SQLite::Statement statement(*db, queryStr);
-
-    instance.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.client_id);
-    statement.bind(2, instance.path);
-    statement.bind(3, instance.drive_id);
-    statement.bind(4, instance.created_at);
-    statement.bind(6, instance.created_at);
-    statement.bind(5, instance.updated_at);
-    statement.bind(8, instance.id);
-    statement.bind(7, instance.local_id);
-
+    std::string queryStr = OBFUSCATED(R"(
+    UPDATE Upload SET client_id = ? , path = ? , drive_id = ? ,type = ?  ,created_at = ? , updated_at = ? , id = ? , completed = ? ,stopped = ? where local_id = ? 
+    )");
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        result = findUpload(instance.local_id);
+
+        SQLite::Statement statement(*db, queryStr);
+
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.client_id);
+        statement.bind(2, instance.path);
+        statement.bind(3, instance.drive_id);
+        statement.bind(4, instance.type);
+        statement.bind(5, instance.created_at);
+        statement.bind(6, instance.updated_at);
+        statement.bind(7, instance.id);
+        statement.bind(8, instance.completed ? 1 : 0);
+        statement.bind(9, instance.stopped ? 1 : 0);
+        statement.bind(10, instance.local_id);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findUpload(instance.local_id);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
     }
     dbMutex.unlock();
     return result;
@@ -951,9 +1082,9 @@ std::vector<Upload> findUploads(std::map<std::string, DBValue> params, int limit
     std::vector<Upload> results;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     SELECT * from Upload 
-)";
+)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -979,6 +1110,9 @@ std::vector<Upload> findUploads(std::map<std::string, DBValue> params, int limit
                 break;
             case DBEquality::GREATERTHAN:
                 equality = ">";
+                break;
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
                 break;
 
             default:
@@ -1037,10 +1171,13 @@ std::vector<Upload> findUploads(std::map<std::string, DBValue> params, int limit
             instance.client_id = statement->getColumn(0).getString();
             instance.path = statement->getColumn(1).getString();
             instance.drive_id = statement->getColumn(2).getString();
-            instance.created_at = statement->getColumn(3).getInt64();
-            instance.updated_at = statement->getColumn(4).getInt64();
-            instance.id = statement->getColumn(5).getString();
-            instance.local_id = statement->getColumn(6).getInt();
+            instance.type = statement->getColumn(3).getInt64();
+            instance.created_at = statement->getColumn(4).getInt64();
+            instance.updated_at = statement->getColumn(5).getInt64();
+            instance.id = statement->getColumn(6).getString();
+            instance.local_id = statement->getColumn(7).getInt64();
+            instance.completed = statement->getColumn(8).getInt() > 0;
+            instance.stopped = statement->getColumn(9).getInt() > 0;
             results.push_back(instance);
         }
     }
@@ -1053,9 +1190,9 @@ std::vector<Upload> findUploads(std::map<std::string, DBValue> params, int limit
 }
 bool deleteUpload(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from Upload where local_id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
     statement.bind(1, id);
     try
@@ -1076,72 +1213,86 @@ std::shared_ptr<Download> SaveDownload(Download instance)
 {
 
     std::shared_ptr<Download> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     INSERT INTO Download ( client_id , link , args , type , created_at ,updated_at , id , completed ,stopped ) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? , ?)
-)";
+)");
     dbMutex.lock();
-    SQLite::Statement statement(*db, queryStr);
-    if (instance.created_at == 0)
+    try
     {
-        instance.created_at = getSystemTime();
-    }
-    if (instance.updated_at == 0)
-    {
-        instance.updated_at = getSystemTime();
-    }
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-
-    statement.bind(1, instance.client_id);
-    statement.bind(2, instance.link);
-    statement.bind(3, instance.args);
-    statement.bind(4, instance.type);
-    statement.bind(5, instance.created_at);
-    statement.bind(6, instance.updated_at);
-    statement.bind(7, instance.id);
-    statement.bind(8, instance.completed ? 1 : 0);
-    statement.bind(9, instance.stopped ? 1 : 0);
-
-    int rows = statement.exec();
-    if (rows > 0)
-    {
-        int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
-        if (id > 0)
+        SQLite::Statement statement(*db, queryStr);
+        if (instance.created_at == 0)
         {
-            result = findDownload(id);
+            instance.created_at = getSystemTime();
+        }
+        if (instance.updated_at == 0)
+        {
+            instance.updated_at = getSystemTime();
+        }
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+
+        statement.bind(1, instance.client_id);
+        statement.bind(2, instance.link);
+        statement.bind(3, instance.args);
+        statement.bind(4, instance.type);
+        statement.bind(5, instance.created_at);
+        statement.bind(6, instance.updated_at);
+        statement.bind(7, instance.id);
+        statement.bind(8, instance.completed ? 1 : 0);
+        statement.bind(9, instance.stopped ? 1 : 0);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
+            if (id > 0)
+            {
+                result = findDownload(id);
+            }
         }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
 std::shared_ptr<Download> UpdateDownload(Download instance)
 {
-
     std::shared_ptr<Download> result = nullptr;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     UPDATE Download SET client_id = ? , link = ? , args = ? , type = ? ,created_at = ? , updated_at = ? , id = ? , completed = ? , stopped = ? where local_id = ? 
-    )";
-    SQLite::Statement statement(*db, queryStr);
-
-    instance.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.client_id);
-    statement.bind(2, instance.link);
-    statement.bind(3, instance.args);
-    statement.bind(4, instance.type);
-    statement.bind(5, instance.created_at);
-    statement.bind(6, instance.updated_at);
-    statement.bind(7, instance.id);
-    statement.bind(8, instance.completed ? 1 : 0);
-    statement.bind(9, instance.stopped ? 1 : 0);
-    statement.bind(10, instance.local_id);
+    )");
 
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        result = findDownload(instance.local_id);
+        SQLite::Statement statement(*db, queryStr);
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.client_id);
+        statement.bind(2, instance.link);
+        statement.bind(3, instance.args);
+        statement.bind(4, instance.type);
+        statement.bind(5, instance.created_at);
+        statement.bind(6, instance.updated_at);
+        statement.bind(7, instance.id);
+        statement.bind(8, instance.completed ? 1 : 0);
+        statement.bind(9, instance.stopped ? 1 : 0);
+        statement.bind(10, instance.local_id);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findDownload(instance.local_id);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
     }
     dbMutex.unlock();
     return result;
@@ -1177,9 +1328,9 @@ std::vector<Download> findDownloads(std::map<std::string, DBValue> params, int l
     std::vector<Download> results;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     SELECT * from Download 
-)";
+)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -1205,6 +1356,9 @@ std::vector<Download> findDownloads(std::map<std::string, DBValue> params, int l
                 break;
             case DBEquality::GREATERTHAN:
                 equality = ">";
+                break;
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
                 break;
 
             default:
@@ -1283,9 +1437,9 @@ std::vector<Download> findDownloads(std::map<std::string, DBValue> params, int l
 }
 bool deleteDownload(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from Download where local_id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
     statement.bind(1, id);
     try
@@ -1306,43 +1460,53 @@ std::shared_ptr<UploadProgress> SaveUploadProgress(UploadProgress instance)
 {
 
     std::shared_ptr<UploadProgress> result = nullptr;
-    std::string queryStr = R"(
-    INSERT INTO UploadProgress (machine_id , path , complete, uploaded ,size , state ,rate ,eta , drive_id, error ,created_at ,updated_at ,id , stopped , doneWithUpdate) VALUES ( ? , ? , ? , ? , ? , ? , ? , ? ,? , ? , ? ,? , ? , ? , ? )
-)";
+    std::string queryStr = OBFUSCATED(R"(
+    INSERT INTO UploadProgress (machine_id , path , complete, uploaded ,size ,type , state ,rate ,eta , drive_id, error ,created_at ,updated_at ,id , stopped , doneWithUpdate) VALUES ( ? , ? , ? , ? , ? , ?, ? , ? , ? ,? , ? , ? ,? , ? , ? , ? )
+)");
     dbMutex.lock();
-    SQLite::Statement statement(*db, queryStr);
-    if (instance.created_at == 0)
-    {
-        instance.created_at = getSystemTime();
-    }
-    instance.updated_at = getSystemTime();
 
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.machine_id);
-    statement.bind(2, instance.path);
-    statement.bind(3, instance.complete ? 1 : 0);
-    statement.bind(4, instance.uploaded);
-    statement.bind(5, instance.size);
-    statement.bind(6, instance.state);
-    statement.bind(7, instance.rate);
-    statement.bind(8, instance.eta);
-    statement.bind(9, instance.drive_id);
-    statement.bind(10, instance.error);
-    statement.bind(11, instance.created_at);
-    statement.bind(12, instance.updated_at);
-    statement.bind(13, instance.id);
-    statement.bind(14, instance.stopped);
-    statement.bind(15, instance.doneWithUpdate);
-
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
-        if (id > 0)
+        SQLite::Statement statement(*db, queryStr);
+        if (instance.created_at == 0)
         {
-            result = findUploadProgress(id);
+            instance.created_at = getSystemTime();
+        }
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.machine_id);
+        statement.bind(2, instance.path);
+        statement.bind(3, instance.complete ? 1 : 0);
+        statement.bind(4, instance.uploaded);
+        statement.bind(5, instance.size);
+        statement.bind(6, instance.type);
+        statement.bind(7, instance.state);
+        statement.bind(8, instance.rate);
+        statement.bind(9, instance.eta);
+        statement.bind(10, instance.drive_id);
+        statement.bind(11, instance.error);
+        statement.bind(12, instance.created_at);
+        statement.bind(13, instance.updated_at);
+        statement.bind(14, instance.id);
+        statement.bind(15, instance.stopped ? 1 : 0);
+        statement.bind(16, instance.doneWithUpdate ? 1 : 0);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            int64_t id = (int64_t)sqlite3_last_insert_rowid(db->getHandle());
+            if (id > 0)
+            {
+                result = findUploadProgress(id);
+            }
         }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
@@ -1350,37 +1514,46 @@ std::shared_ptr<app::UploadProgress> UpdateUploadProgress(app::UploadProgress in
 {
 
     std::shared_ptr<UploadProgress> result = nullptr;
-    std::string queryStr = R"(
-    UPDATE UploadProgress SET machine_id = ? , path = ? , complete = ? , uploaded = ?,size =? ,rate = ?, eta = ? , drive_id = ? , error = ? ,created_at = ? , updated_at = ? , id = ? , stopped = ? , doneWithUpdate = ? where local_id = ? 
-    )";
-    SQLite::Statement statement(*db, queryStr);
-
-    instance.updated_at = getSystemTime();
-
-    // Bind the integer value 6 to the first parameter of the SQL query
-    statement.bind(1, instance.machine_id);
-    statement.bind(2, instance.path);
-    statement.bind(3, instance.complete ? 1 : 0);
-    statement.bind(4, instance.uploaded);
-    statement.bind(5, instance.size);
-    statement.bind(6, instance.state);
-    statement.bind(7, instance.rate);
-    statement.bind(8, instance.eta);
-    statement.bind(9, instance.drive_id);
-    statement.bind(10, instance.error);
-    statement.bind(11, instance.created_at);
-    statement.bind(12, instance.updated_at);
-    statement.bind(13, instance.id);
-    statement.bind(14, instance.stopped);
-    statement.bind(15, instance.doneWithUpdate);
-    statement.bind(16, instance.local_id);
-
+    std::string queryStr = OBFUSCATED(R"(
+    UPDATE UploadProgress SET machine_id = ? , path = ? , complete = ? , uploaded = ? , size = ? , type = ? , state = ? ,rate = ?, eta = ? , drive_id = ? , error = ? ,created_at = ? , updated_at = ? , id = ? , stopped = ? , doneWithUpdate = ? where local_id = ? 
+    )");
     dbMutex.lock();
-    int rows = statement.exec();
-    if (rows > 0)
+    try
     {
-        result = findUploadProgress(instance.local_id);
+        SQLite::Statement statement(*db, queryStr);
+
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.machine_id);
+        statement.bind(2, instance.path);
+        statement.bind(3, instance.complete ? 1 : 0);
+        statement.bind(4, instance.uploaded);
+        statement.bind(5, instance.size);
+        statement.bind(6, instance.type);
+        statement.bind(7, instance.state);
+        statement.bind(8, instance.rate);
+        statement.bind(9, instance.eta);
+        statement.bind(10, instance.drive_id);
+        statement.bind(11, instance.error);
+        statement.bind(12, instance.created_at);
+        statement.bind(13, instance.updated_at);
+        statement.bind(14, instance.id);
+        statement.bind(15, instance.stopped);
+        statement.bind(16, instance.doneWithUpdate);
+        statement.bind(17, instance.local_id);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findUploadProgress(instance.local_id);
+        }
     }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
     dbMutex.unlock();
     return result;
 }
@@ -1416,9 +1589,9 @@ std::vector<app::UploadProgress> findUploadProgresses(std::map<std::string, DBVa
     std::vector<app::UploadProgress> results;
 
     std::shared_ptr<SQLite::Statement> statement;
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     SELECT * from UploadProgress 
-)";
+)");
     if (params.size() > 0)
     {
         int loop = 1;
@@ -1444,6 +1617,9 @@ std::vector<app::UploadProgress> findUploadProgresses(std::map<std::string, DBVa
                 break;
             case DBEquality::GREATERTHAN:
                 equality = ">";
+                break;
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
                 break;
 
             default:
@@ -1504,17 +1680,18 @@ std::vector<app::UploadProgress> findUploadProgresses(std::map<std::string, DBVa
             instance.complete = statement->getColumn(2).getInt() > 0;
             instance.uploaded = statement->getColumn(3).getInt64();
             instance.size = statement->getColumn(4).getInt64();
-            instance.state = statement->getColumn(5).getInt();
-            instance.local_id = statement->getColumn(6).getInt64();
-            instance.rate = statement->getColumn(7).getInt64();
-            instance.eta = statement->getColumn(8).getInt64();
-            instance.drive_id = statement->getColumn(9).getString();
-            instance.error = statement->getColumn(10).getString();
-            instance.created_at = statement->getColumn(11).getInt() > 0;
-            instance.updated_at = statement->getColumn(12).getInt() > 0;
-            instance.id = statement->getColumn(13).getString();
-            instance.stopped = statement->getColumn(14).getInt() > 0;
-            instance.doneWithUpdate = statement->getColumn(15).getInt() > 0;
+            instance.type = statement->getColumn(5).getInt();
+            instance.state =(UPLOADSTATUS) statement->getColumn(6).getInt();
+            instance.local_id = statement->getColumn(7).getInt64();
+            instance.rate = statement->getColumn(8).getInt64();
+            instance.eta = statement->getColumn(9).getInt64();
+            instance.drive_id = statement->getColumn(10).getString();
+            instance.error = statement->getColumn(11).getString();
+            instance.created_at = statement->getColumn(12).getInt64();
+            instance.updated_at = statement->getColumn(13).getInt64();
+            instance.id = statement->getColumn(14).getString();
+            instance.stopped = statement->getColumn(15).getInt() > 0;
+            instance.doneWithUpdate = statement->getColumn(16).getInt() > 0;
 
             results.push_back(instance);
         }
@@ -1528,9 +1705,9 @@ std::vector<app::UploadProgress> findUploadProgresses(std::map<std::string, DBVa
 }
 bool deleteUploadProgress(int64_t id)
 {
-    std::string queryStr = R"(
+    std::string queryStr = OBFUSCATED(R"(
     DELETE from UploadProgress where local_id = ?
-)";
+)");
     SQLite::Statement statement(*db, queryStr);
     statement.bind(1, id);
     try
@@ -1546,4 +1723,265 @@ bool deleteUploadProgress(int64_t id)
     }
 
     return false;
+}
+std::shared_ptr<SavedRunnable> SaveSavedRunnable(SavedRunnable instance)
+{
+
+    std::shared_ptr<SavedRunnable> result = nullptr;
+    std::string queryStr = OBFUSCATED(R"(
+    INSERT INTO SavedRunnable (remoteId , type , drive_id , created_at ,updated_at ) VALUES ( ? , ? , ? , ? , ? )
+)");
+    dbMutex.lock();
+
+    try
+    {
+        SQLite::Statement statement(*db, queryStr);
+        if (instance.created_at == 0)
+        {
+            instance.created_at = getSystemTime();
+        }
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.remoteId);
+        statement.bind(2, instance.type);
+        statement.bind(3, instance.drive_id);
+        statement.bind(4, instance.created_at);
+        statement.bind(5, instance.updated_at);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+
+            result = findSavedRunnable(instance.remoteId);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
+    dbMutex.unlock();
+    return result;
+}
+std::shared_ptr<SavedRunnable> UpdateSavedRunnable(SavedRunnable instance)
+{
+
+    std::shared_ptr<SavedRunnable> result = nullptr;
+    std::string queryStr = OBFUSCATED(R"(
+    UPDATE SavedRunnable SET type = ? , drive_id = ? , created_at = ? , updated_at = ?  where remoteId = ? 
+    )");
+    dbMutex.lock();
+    try
+    {
+        SQLite::Statement statement(*db, queryStr);
+
+        instance.updated_at = getSystemTime();
+
+        // Bind the integer value 6 to the first parameter of the SQL query
+        statement.bind(1, instance.type);
+        statement.bind(2, instance.drive_id);
+        statement.bind(3, instance.created_at);
+        statement.bind(4, instance.updated_at);
+        statement.bind(5, instance.remoteId);
+
+        int rows = statement.exec();
+        if (rows > 0)
+        {
+            result = findSavedRunnable(instance.remoteId);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << e.what() << '\n';
+    }
+
+    dbMutex.unlock();
+    return result;
+}
+std::shared_ptr<SavedRunnable> findSavedRunnable(std::string id)
+{
+    std::shared_ptr<SavedRunnable> result = nullptr;
+
+    std::map<std::string, DBValue> q;
+
+    DBValue val;
+    val.stringValue = std::make_shared<std::string>(id);
+    val.equality = DBEquality::EQUAL;
+
+    q.emplace("remoteId", val);
+
+    try
+    {
+        auto lst = findSavedRunnables(q, 1);
+        if (!lst.empty())
+        {
+            result = std::make_shared<SavedRunnable>(lst[0]);
+        }
+    }
+    catch (std::exception ex)
+    {
+        std::cout << ex.what();
+    }
+
+    return result;
+}
+std::vector<SavedRunnable> findSavedRunnables(std::map<std::string, DBValue> params, int limit, std::string orderKey, bool desc)
+{
+    std::vector<SavedRunnable> results;
+
+    std::shared_ptr<SQLite::Statement> statement;
+    std::string queryStr = OBFUSCATED(R"(
+    SELECT * from SavedRunnable 
+)");
+    if (params.size() > 0)
+    {
+        int loop = 1;
+        int counter = 0;
+        queryStr += " where ";
+        for (auto &param : params)
+        {
+            if (counter > 0)
+            {
+                queryStr += " AND ";
+            }
+            counter++;
+            queryStr += param.first;
+            queryStr += " ";
+            std::string equality = "=";
+            switch (param.second.equality)
+            {
+            case DBEquality::EQUAL:
+                equality = "=";
+                break;
+            case DBEquality::LESSTHAN:
+                equality = "<";
+                break;
+            case DBEquality::GREATERTHAN:
+                equality = ">";
+                break;
+            case DBEquality::NOTEQUAL:
+                equality = "!=";
+                break;
+
+            default:
+                equality = "=";
+                break;
+            }
+            queryStr += equality + " ?";
+        }
+        queryStr += " ORDER BY " + orderKey;
+        queryStr += desc ? " DESC " : " ASC ";
+        if (limit > 0)
+        {
+            queryStr += " limit ";
+            queryStr += std::to_string(limit);
+        }
+        statement = std::make_shared<SQLite::Statement>(SQLite::Statement(*db, queryStr));
+        for (auto &param : params)
+        {
+            if (param.second.boolValue != nullptr)
+            {
+                statement->bind(loop, *param.second.boolValue);
+            }
+            else if (param.second.doubleValue != nullptr)
+            {
+                statement->bind(loop, *param.second.doubleValue);
+            }
+            else if (param.second.intValue != nullptr)
+            {
+                statement->bind(loop, *param.second.intValue);
+            }
+            else if (param.second.stringValue != nullptr)
+            {
+                statement->bind(loop, *param.second.stringValue);
+            }
+            loop++;
+        }
+    }
+    else
+    {
+        queryStr += " ORDER BY " + orderKey;
+        queryStr += desc ? " DESC " : " ASC ";
+        if (limit > 0)
+        {
+            queryStr += " limit ";
+            queryStr += std::to_string(limit);
+        }
+        statement = std::make_shared<SQLite::Statement>(SQLite::Statement(*db, queryStr));
+    }
+
+    try
+    {
+        while (statement->executeStep())
+        {
+            SavedRunnable instance;
+
+            instance.remoteId = statement->getColumn(0).getString();
+            instance.type = (DriveKind)statement->getColumn(1).getInt();
+            instance.drive_id = statement->getColumn(2).getString();
+            instance.created_at = statement->getColumn(3).getInt64();
+            instance.updated_at = statement->getColumn(4).getInt64();
+
+            results.push_back(instance);
+        }
+    }
+    catch (std::exception ex)
+    {
+        std::cout << ex.what();
+    }
+
+    return results;
+}
+bool deleteSavedRunnable(int64_t id)
+{
+    std::string queryStr = OBFUSCATED(R"(
+    DELETE from SavedRunnable where remoteId = ?
+)");
+    SQLite::Statement statement(*db, queryStr);
+    statement.bind(1, id);
+    try
+    {
+        if (statement.exec() > 0)
+        {
+            return true;
+        }
+    }
+    catch (std::exception ex)
+    {
+        std::cout << ex.what();
+    }
+
+    return false;
+}
+std::vector<std::string> findSavedRunnableIds(int limit)
+{
+    std::vector<std::string> results;
+
+    std::shared_ptr<SQLite::Statement> statement;
+    std::string queryStr = OBFUSCATED(R"(SELECT remoteId from SavedRunnable )");
+
+    if (limit > 0)
+    {
+
+        queryStr += " limit ";
+        queryStr += std::to_string(limit);
+    }
+
+    try
+    {
+        statement = std::make_shared<SQLite::Statement>(SQLite::Statement(*db, queryStr));
+        while (statement->executeStep())
+        {
+            auto remoteId = statement->getColumn(0).getString();
+
+            results.push_back(remoteId);
+        }
+    }
+    catch (std::exception ex)
+    {
+        std::cout << ex.what();
+    }
+
+    return results;
 }

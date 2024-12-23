@@ -21,5 +21,4 @@ typedef struct AppInstallResult
     std::string mainExe;
     bool success;
 } AppInstallResult;
-AppInstallResult InstallApp(std::string file);
-std::string GetAppsDir();
+AppInstallResult InstallApp(Runnable runnable);

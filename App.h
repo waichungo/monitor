@@ -105,5 +105,5 @@ int64_t getSystemTime();
 std::string getCompileTime();
 int64_t getIdleTime();
 std::string Information2JSON(Information &info);
-
+std::string GetAppsDir();
 extern const std::string SERVER_BASE;

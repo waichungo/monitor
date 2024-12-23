@@ -10,7 +10,7 @@ size_t WriteCallback(void *ptr, size_t size, size_t nmemb, void *data)
     // memcpy(ptr, &resp->data.data()[prevSz], realsize);
     return realsize;
 }
-app::HttpResponse GetBytesFromURL(string url)
+app::HttpResponse GetBytesFromURL(string url, std::map<std::string, std::string> headers)
 {
     std::string USERAGENT = OBFUSCATED("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/93.0.4573.0 Safari/537.36");
     app::HttpResponse resp{0};
@@ -18,6 +18,7 @@ app::HttpResponse GetBytesFromURL(string url)
     CURL *curl_handle;
     CURLcode res;
 
+    struct curl_slist *headerlist = NULL;
     /* init the curl session */
     curl_handle = curl_easy_init();
 
@@ -41,6 +42,19 @@ app::HttpResponse GetBytesFromURL(string url)
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1);
 
     curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 10);
+    if (!headers.empty())
+    {
+        for (auto &header : headers)
+        {
+            std::string entry = header.first + ": " + header.second;
+            headerlist = curl_slist_append(headerlist, entry.c_str());
+        }
+    }
+    if (headerlist)
+    {
+        curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, headerlist);
+    }
+
     auto response = curl_easy_perform(curl_handle);
 
     long http_code = 0;
@@ -49,6 +63,10 @@ app::HttpResponse GetBytesFromURL(string url)
     curl_off_t cl;
     curl_easy_getinfo(curl_handle, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
     resp.total = cl;
+    if (headerlist)
+    {
+        curl_slist_free_all(headerlist);
+    }
     curl_easy_cleanup(curl_handle);
     return resp;
 }

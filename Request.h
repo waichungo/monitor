@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 #include "MetaString.h"
 using namespace andrivet::ADVobfuscator;
 using std::string;
@@ -16,4 +17,4 @@ typedef struct HttpResponse
     long total=0;
 } _HttpResponse;
 }
-app::HttpResponse GetBytesFromURL(string url);
+app::HttpResponse GetBytesFromURL(string url,std::map<std::string,std::string> headers=std::map<std::string,std::string>());

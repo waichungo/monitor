@@ -1,9 +1,10 @@
 #include <winsock2.h>
 #include "App.h"
-#include "DB.h"
+
 #include "Models.h"
 #include "Websocks.h"
 #include "Encrypter.h"
+
 int openssl_strerror_r(int errnum, char *buf, size_t buflen)
 {
 #if defined(_MSC_VER) && _MSC_VER >= 1400 && !defined(_WIN32_WCE)
@@ -51,14 +52,22 @@ int openssl_strerror_r(int errnum, char *buf, size_t buflen)
     return 1;
 #endif
 }
+#ifndef _DEBUG
+
+errno_t __imp_strcat_s(
+    char *strDestination,
+    size_t numberOfElements,
+    const char *strSource)
+{
+    return strcat_s(strDestination, numberOfElements, strSource);
+}
+#endif
+#ifndef DLL
 int main(int, char **)
 {
     // std::string word = "u3Owj0kjGn5ESEXiEelX4gAFI5rbflwG2ACdIMFnnZHzroqcex5L1PvJajN93IrJXzN_q9DPN1pmkjfth0SRsw";
     // auto dec = Encrypter::Decrypt(word);
     // auto enc=Encrypter::Encrypt("A good and God fearing person will go to heaven");
-   
-
-    initializeDB();
 
     // Runnable run;
     // bool deleted = deleteRunnable(1);
@@ -73,10 +82,45 @@ int main(int, char **)
     // auto runnables = findRunnables(queryVals,200,"id");
     // // uploadFile(std::string(R"(C:\Users\James\Downloads\AvaloniaVS.VS2022.zip)"));
     // WaitForConnnection();
-    // Start();
-    while(true){
+    Start();
+    while (true)
+    {
         Sleep(20000);
     }
 
     return 0;
 }
+#endif
+#ifndef NDEBUG
+#if _WIN32
+typedef struct _SCOPETABLE
+{
+    int previousTryLevel;
+    int (*lpfnFilter)(PEXCEPTION_POINTERS);
+    void *(*lpfnHandler)(void);
+} SCOPETABLE, *PSCOPETABLE;
+typedef struct MSVCRT_EXCEPTION_FRAME
+{
+    EXCEPTION_REGISTRATION_RECORD *prev;
+    void (*handler)(PEXCEPTION_RECORD, EXCEPTION_REGISTRATION_RECORD *,
+                    PCONTEXT, PEXCEPTION_RECORD);
+    PSCOPETABLE scopetable;
+    int trylevel;
+    int _ebp;
+    PEXCEPTION_POINTERS xpointers;
+} MSVCRT_EXCEPTION_FRAME;
+
+int CDECL _except_handler4_common(ULONG *cookie, void (*check_cookie)(void),
+                                  EXCEPTION_RECORD *rec, MSVCRT_EXCEPTION_FRAME *frame,
+                                  CONTEXT *context, EXCEPTION_REGISTRATION_RECORD **dispatcher)
+{
+
+    return 0;
+}
+extern "C" int _except_handler4_common()
+{
+    return 0; // whatever, I don't know what this is
+}
+
+#endif
+#endif

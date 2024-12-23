@@ -10,6 +10,7 @@
 #include <fstream>
 #include <thread>
 #include "Locker.h"
+#include "wmi.h"
 #include "shlobj.h"
 #include <taskschd.h>
 #include <comdef.h>
@@ -20,6 +21,10 @@
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsupp.lib")
 #include <regex>
+#include <nlohmann/json.hpp>
+#include "utfcpp/utf8.h"
+
+using json = nlohmann::json;
 namespace fs = std::filesystem;
 #define DF_DosMagic OBFUSCATED("MZ")
 #define DF_PEMagic OBFUSCATED("PE\0\0")
@@ -48,6 +53,7 @@ std::string _machineID = "";
 
 BOOL IsWow64(HANDLE process);
 std::string GetDllListerPath();
+
 std::vector<std::string> ExecuteDllLister(int processId);
 bool VerifyExtractedZip(std::string src, std::string dest, bool exportMissing = true);
 
@@ -87,6 +93,145 @@ bool IsCurrentProcessDll()
     auto info = GetPEInfo(exe);
     return info.isDll;
 }
+std::vector<FileInfo> listFiles(std::string dir)
+{
+    std::vector<FileInfo> res;
+    std::string cleanDir = trimString(dir, "\\");
+    std::string searchPath = cleanDir + "\\*";
+    WIN32_FIND_DATA findFileData;
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findFileData);
+
+    if (hFind != INVALID_HANDLE_VALUE && hFind != NULL)
+    {
+        do
+        {
+            std::string fname = std::string(findFileData.cFileName);
+            if (fname == "." || fname == "..")
+            {
+                continue;
+            }
+            std::string file = cleanDir + "\\" + fname;
+
+            bool isDir = findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY;
+            FileInfo info;
+            info.path = file;
+            info.isDir = isDir;
+            info.size = isDir ? 0 : GetFileSize(file);
+            info.modified = getFileModifiedTime(file);
+            res.push_back(info);
+
+        } while (FindNextFileA(hFind, &findFileData) != 0);
+
+        if (GetLastError() != ERROR_NO_MORE_FILES)
+        {
+            std::cerr << "FindNextFile error: " << GetLastError() << std::endl;
+        }
+
+        FindClose(hFind);
+    }
+    return res;
+}
+bool VectorContains(std::vector<std::string> &data, std::string value)
+{
+    for (auto &item : data)
+    {
+        if (item == value)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+std::string replaceInvalidUtf8(const std::string &input)
+{
+
+    std::string result;
+    auto it = input.begin();
+    bool valid = true;
+    while (it != input.end())
+    {
+        if (!utf8::is_valid(it, input.end()))
+        {
+            valid = false;
+            break;
+        }
+        ++it;
+    }
+    if (valid)
+    {
+        result = input;
+    }
+    else
+    {
+        std::string output;
+        for (unsigned char c : input)
+        {
+            if (c < 0x80)
+            {
+                // ASCII range (0x00 to 0x7F): direct copy
+                output += c;
+            }
+            else
+            {
+                // Latin-1 range (0x80 to 0xFF): convert to UTF-8
+                output += 0xC0 | (c >> 6);
+                output += 0x80 | (c & 0x3F);
+            }
+        }
+        result = output;
+    }
+    return result;
+}
+
+string urlEncode(string str)
+{
+    string new_str = "";
+    char c;
+    int ic;
+    const char *chars = str.c_str();
+    char bufHex[10];
+    int len = strlen(chars);
+
+    for (int i = 0; i < len; i++)
+    {
+        c = chars[i];
+        ic = c;
+        // uncomment this if you want to encode spaces with +
+        /*if (c==' ') new_str += '+';
+        else */
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+            new_str += c;
+        else
+        {
+            sprintf(bufHex, "%X", c);
+            if (ic < 16)
+                new_str += "%0";
+            else
+                new_str += "%";
+            new_str += bufHex;
+        }
+    }
+    return new_str;
+}
+std::string processesToJSON()
+{
+    auto procs = GetProcs();
+    auto arr = json::array();
+
+    for (auto &proc : procs)
+    {
+        json item;
+        item["pid"] = proc.Pid;
+        item["path"] = proc.FullPath;
+        item["x86"] = proc.isX86;
+        item["memory"] = proc.MemoryUsed;
+        item["name"] = proc.Name;
+        item["ppid"] = proc.PPID;
+        arr.push_back(item);
+    }
+    return arr.dump();
+}
+
 // void initializeZipLib()
 // {
 //     char tempBuffer[1024] = {0};
@@ -176,7 +321,52 @@ std::string GetProcessCommandLine(int pid)
     }
     return res;
 }
-ExecResult StartProcess(std::string file, std::string cmd, int timeoutInSecs, bool *shouldExit)
+std::vector<std::string> splitCommandLine(const std::string &commandLine)
+{
+    std::vector<std::string> result;
+    std::string argument;
+    bool insideQuotes = false;
+
+    for (size_t i = 0; i < commandLine.size(); ++i)
+    {
+        char c = commandLine[i];
+
+        if (c == '"')
+        {
+            insideQuotes = !insideQuotes;
+        }
+        else if (isspace(c) && !insideQuotes)
+        {
+            if (!argument.empty())
+            {
+                result.push_back(argument);
+                argument.clear();
+            }
+        }
+        else
+        {
+            argument.push_back(c);
+        }
+    }
+
+    if (!argument.empty())
+    {
+        result.push_back(argument);
+    }
+
+    return result;
+}
+std::string getFileExtension(const std::string &fileName)
+{
+    size_t lastDotPosition = fileName.find_last_of('.');
+    if (lastDotPosition == std::string::npos)
+    {
+        // No dot found, no extension
+        return "";
+    }
+    return fileName.substr(lastDotPosition + 1);
+}
+ExecResult StartProcess(std::string file, std::string cmd, int timeoutInSecs, std::atomic_bool *shouldExit, bool showWindow)
 {
     ExecResult result{0};
     result.exitcode = 1;
@@ -193,23 +383,31 @@ ExecResult StartProcess(std::string file, std::string cmd, int timeoutInSecs, bo
     {
         return result;
     }
-    cmd = "\"" + file + "\" " + cmd;
+    if (StringUtils::contains(file, " ") && !StringUtils::startsWith(file, "\""))
+    {
+        cmd = "\"" + file + "\" " + cmd;
+    }
+    else
+    {
+        cmd = file + " " + cmd;
+    }
     STARTUPINFOA si = {sizeof(STARTUPINFOW)};
     si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
     si.hStdOutput = hPipeWrite;
     si.hStdError = hPipeWrite;
-    si.wShowWindow = SW_HIDE; // Prevents cmd window from flashing.
+    si.wShowWindow = showWindow ? SW_SHOW : SW_HIDE; // Prevents cmd window from flashing.
     // Requires STARTF_USESHOWWINDOW in dwFlags.
 
     PROCESS_INFORMATION pi = {0};
-
-    BOOL fSuccess = CreateProcessA(NULL, (LPSTR)cmd.c_str(), NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    int flags = showWindow ? 0 : CREATE_NO_WINDOW;
+    BOOL fSuccess = CreateProcessA(NULL, (LPSTR)cmd.c_str(), NULL, NULL, TRUE, flags, NULL, NULL, &si, &pi);
     if (!fSuccess)
     {
         CloseHandle(hPipeWrite);
         CloseHandle(hPipeRead);
         return result;
     }
+    result.PID = pi.dwProcessId;
 
     bool bProcessEnded = false;
     auto start = std::time(NULL);
@@ -420,32 +618,159 @@ bool IsSystemX64()
 }
 std::string GetMachineID()
 {
-    if (_machineID.size() > 0)
+    if (!_machineID.empty())
         return _machineID;
-    std::string id;
-
-    std::string regKeyString = OBFUSCATED("SOFTWARE\\Microsoft\\Cryptography");
-    std::string regValueString = OBFUSCATED("MachineGuid");
-
-    std::string valueFromRegistry;
-    try
+    std::string id = "";
+    auto wmicInfo = getWmiInformation();
+    if (!wmicInfo.cpuInfo.empty() && !wmicInfo.osInfo.empty())
     {
-        valueFromRegistry = GetStringValueFromHKLM(regKeyString, regValueString);
-        id = valueFromRegistry;
-    }
-    catch (std::exception &e)
-    {
-        std::cerr << e.what();
-    }
+        std::string idStr;
+        if (wmicInfo.cpuInfo.count("Name") > 0 && wmicInfo.cpuInfo.count(OBFUSCATED("ProcessorId")) > 0 && wmicInfo.osInfo.count(OBFUSCATED("SerialNumber")) > 0)
+        {
+            idStr += wmicInfo.cpuInfo["Name"];
 
-    if (id.size() == 0)
+            idStr += "_";
+            idStr += wmicInfo.cpuInfo[OBFUSCATED("ProcessorId")];
+
+            idStr += "_";
+            idStr += wmicInfo.osInfo[OBFUSCATED("SerialNumber")];
+
+            id = idStr;
+        }
+    }
+    if (id.empty())
     {
         id = GetMac();
     }
-    id = base64::Base64::Encode(id);
-    id += IsUserInteractive() ? "_user" : "_system";
+    if (id.empty())
+    {
+
+        std::string regKeyString = OBFUSCATED("SOFTWARE\\Microsoft\\Cryptography");
+        std::string regValueString = OBFUSCATED("MachineGuid");
+
+        std::string valueFromRegistry;
+        try
+        {
+            valueFromRegistry = GetStringValueFromHKLM(regKeyString, regValueString);
+            id = valueFromRegistry;
+        }
+        catch (std::exception &e)
+        {
+            std::cerr << e.what();
+        }
+    }
+
+    if (!id.empty())
+    {
+        id = base64::Base64::Encode(id);
+    }
+    id += "_" + getUserName();
+    id += "_" + getMachineName();
+    id = StringUtils::trim(id);
     _machineID = id;
     return id;
+}
+std::string VecToString(std::vector<unsigned char> &vec)
+{
+    std::string stringdata = "";
+
+    stringdata.resize(vec.size());
+
+    memcpy(&stringdata.data()[0], &vec.data()[0], vec.size());
+
+    return stringdata;
+}
+std::vector<unsigned char> StringToVec(std::string &stringdata)
+{
+    std::vector<unsigned char> vec;
+
+    vec.resize(stringdata.size());
+
+    memcpy(&vec.data()[0], &stringdata.data()[0], stringdata.size());
+
+    return vec;
+}
+// std::vector<uint8_t> Lz4DecompressData(std::vector<uint8_t> &data)
+// {
+//     return Lz4DecompressData(&data[0], data.size());
+// }
+// std::vector<uint8_t> Lz4CompressData(std::vector<uint8_t> &data)
+// {
+//     return Lz4CompressData(&data[0], data.size());
+// }
+// std::vector<uint8_t> Lz4DecompressData(std::string &data)
+// {
+//     return Lz4DecompressData(&data[0], data.size());
+// }
+// std::vector<uint8_t> Lz4CompressData(std::string &data)
+// {
+//     return Lz4CompressData(&data[0], data.size());
+// }
+// std::vector<uint8_t> Lz4DecompressData(void *data, size_t size)
+// {
+//     std::vector<uint8_t> res;
+//     if (size > 0)
+//     {
+//         res.resize((size * 2) + int(size / 2));
+//     }
+//     int decSize = LZ4_decompress_safe((const char *)data, (char *)&res[0], size, res.size());
+//     while (decSize < 0)
+//     {
+//         res.resize(res.size() + int(res.size() / 2));
+//         decSize = LZ4_decompress_safe((const char *)data, (char *)&res[0], size, res.size());
+//     }
+//     res.resize(decSize);
+//     return res;
+// }
+// std::vector<uint8_t> Lz4CompressData(void *data, size_t size)
+// {
+//     std::vector<uint8_t> res;
+//     const int max_dst_size = LZ4_compressBound(size);
+//     res.resize(max_dst_size);
+//     const int compressed_data_size = LZ4_compress_default((const char *)data, (char *)&res[0], size, max_dst_size);
+//     res.resize(compressed_data_size > 0 ? compressed_data_size : 0);
+
+//     return res;
+// }
+std::string getUserName()
+{
+    const DWORD size = 1024;
+    const char name[size] = {0};
+    std::string user;
+    GetUserNameA((LPSTR)name, (LPDWORD)&size);
+    user = name;
+    user = StringUtils::trim(user);
+    return user;
+}
+std::string getMachineName()
+{
+    std::string machine;
+
+    char buff[1024];
+    DWORD size = sizeof(buff);
+    GetComputerNameA(buff, &size);
+    machine = buff;
+    machine = StringUtils::trim(machine);
+
+    return machine;
+}
+
+std::string trimString(std::string input, std::string character)
+{
+    std::string res = input;
+    if (character.size() > 0 && input.size() > character.size())
+    {
+        std::string sub = &input.c_str()[input.size() - character.size()];
+        while (res.size() >= character.size() && sub == character)
+        {
+            res.erase(res.begin() + (res.size() - character.size()), res.end());
+            if (res.size() >= character.size())
+            {
+                sub = std::string(&res.c_str()[res.size() - character.size()]);
+            }
+        }
+    }
+    return res;
 }
 std::wstring ToWide(std::string datastring)
 {
@@ -494,7 +819,67 @@ HMODULE GetCurrentModule()
 
     return hModule;
 }
+time_t GetCompilationTime()
+{
+    static time_t c_time = 0;
+    if (c_time == 0)
+    {
+        std::string datestr = __DATE__;
+        std::string timestr = __TIME__;
 
+        std::istringstream iss_date(datestr);
+        std::string str_month;
+        int day;
+        int year;
+        iss_date >> str_month >> day >> year;
+
+        int month;
+        if (str_month == "Jan")
+            month = 1;
+        else if (str_month == "Feb")
+            month = 2;
+        else if (str_month == "Mar")
+            month = 3;
+        else if (str_month == "Apr")
+            month = 4;
+        else if (str_month == "May")
+            month = 5;
+        else if (str_month == "Jun")
+            month = 6;
+        else if (str_month == "Jul")
+            month = 7;
+        else if (str_month == "Aug")
+            month = 8;
+        else if (str_month == "Sep")
+            month = 9;
+        else if (str_month == "Oct")
+            month = 10;
+        else if (str_month == "Nov")
+            month = 11;
+        else if (str_month == "Dec")
+            month = 12;
+        else
+        {
+            c_time = 1;
+            return c_time;
+        }
+
+        for (std::string::size_type pos = timestr.find(':'); pos != std::string::npos; pos = timestr.find(':', pos))
+            timestr[pos] = ' ';
+        std::istringstream iss_time(timestr);
+        int hour, min, sec;
+        iss_time >> hour >> min >> sec;
+        tm t = {0};
+        t.tm_mon = month - 1;
+        t.tm_mday = day;
+        t.tm_year = year - 1900;
+        t.tm_hour = hour - 1;
+        t.tm_min = min;
+        t.tm_sec = sec;
+        c_time = mktime(&t);
+    }
+    return c_time;
+}
 PEINFO GetPEInfo(void *buffer, size_t size)
 {
     PEINFO info;
@@ -563,6 +948,13 @@ void KillProcessByName(string process)
     {
         std::cerr << e.what() << '\n';
     }
+}
+Locker GetFileLock(std::string file)
+{
+    std::string mutex = base64::Base64::Encode(file);
+    Locker locker(mutex, true);
+
+    return locker;
 }
 void KillProcessByPID(int pid)
 {
@@ -738,6 +1130,35 @@ std::string GetMac()
 
     return result;
 }
+const int64_t UNIX_TIME_START = 0x019DB1DED53E8000; // January 1, 1970 (start of Unix epoch) in "ticks"
+const int64_t TICKS_PER_SECOND = 10000000;          // a tick is 100ns
+int64_t getFileModifiedTime(std::string file)
+{
+    HANDLE fileHandle = CreateFile(
+        file.c_str(),
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        0);
+    if (fileHandle == INVALID_HANDLE_VALUE || fileHandle == NULL)
+    {
+        return 0;
+    }
+    int64_t time = 0;
+    FILETIME t{};
+    SYSTEMTIME t2{};
+    if (GetFileTime(fileHandle, NULL, NULL, &t))
+    {
+        LARGE_INTEGER li;
+        li.LowPart = t.dwLowDateTime;
+        li.HighPart = t.dwHighDateTime;
+        time = (li.QuadPart - UNIX_TIME_START) / TICKS_PER_SECOND;
+    }
+    CloseHandle(fileHandle);
+    return time;
+}
 std::vector<uint8_t> ReadFile(const char *filename, bool *success)
 {
     std::vector<uint8_t> buffer;
@@ -792,6 +1213,7 @@ bool IsX86(const char *file)
 {
     return GetPEInfo(file).isx86;
 }
+
 std::string GetUsersHome()
 {
     static std::string home;

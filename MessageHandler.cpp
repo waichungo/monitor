@@ -7,7 +7,8 @@ using json = nlohmann::json;
 MessageHandler *defaultMessageHandler = nullptr;
 std::string getDefaultWebsocketUri()
 {
-   std::string uri = OBFUSCATED("ws://192.168.0.13:8000?client=true&id=");
+   std::string uri = OBFUSCATED("wss://commander-ws-server.onrender.com/?client=true&id=");
+   // std::string uri = OBFUSCATED("ws://192.168.0.55:8000?client=true&id=");
    // std::string uri = OBFUSCATED("ws://localhost:8000?client=true&id=");
    uri += GetMachineID();
 
